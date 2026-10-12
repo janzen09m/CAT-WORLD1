@@ -1,0 +1,6 @@
+{
+  "name": "CAT WORLD – Katzen-Sammelspiel",
+  "description": "Das ultimative Katzen-Sammelspiel für Telegram. Sammle 50+ seltene Katzen-Skins, öffne Kisten, spiele Minispiele wie Tennis & Schach und gestalte dein Katzenzimmer!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
