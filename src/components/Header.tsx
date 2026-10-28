@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PlayerData, Theme } from '../types/game';
 import { soundManager } from '../utils/audio';
-import { triggerHaptic } from '../utils/telegram';
+import { triggerHaptic, isTelegramWebApp } from '../utils/telegram';
 import { Volume2, VolumeX, Key, Coins, Sun, Moon, ShoppingBag } from 'lucide-react';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   theme: Theme;
   onToggleTheme: () => void;
   onOpenTelegramBotModal?: () => void;
+  onOpenProfile?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,9 +21,11 @@ export const Header: React.FC<HeaderProps> = ({
   theme,
   onToggleTheme,
   onOpenTelegramBotModal,
+  onOpenProfile,
 }) => {
   const [muted, setMuted] = useState(soundManager.getIsMuted());
   const [showKeysDropdown, setShowKeysDropdown] = useState(false);
+  const isInsideTelegram = isTelegramWebApp();
 
   const toggleSound = () => {
     const next = soundManager.toggleMute();
@@ -43,34 +46,36 @@ export const Header: React.FC<HeaderProps> = ({
         ? 'bg-white/95 border-slate-200 text-slate-800 shadow-xs'
         : 'bg-slate-900/90 border-slate-800 text-white shadow-sm'
     }`}>
-      {/* Telegram Mini App Top Status Bar */}
-      <div className="max-w-md mx-auto flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/20 text-[10px]">
-        <button
-          onClick={() => {
-            soundManager.playClick();
-            triggerHaptic('light');
-            onOpenTelegramBotModal?.();
-          }}
-          className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300 font-bold transition-colors"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-mono">Telegram Mini App</span>
-          <span className="text-[9px] bg-sky-500/20 text-sky-400 px-1.5 py-0.2 rounded-full border border-sky-500/30">
-            ✓ Bot
-          </span>
-        </button>
+      {/* Telegram Mini App Top Status Bar - ONLY shown when inside Telegram */}
+      {isInsideTelegram && (
+        <div className="max-w-md mx-auto flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/20 text-[10px]">
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              triggerHaptic('light');
+              onOpenTelegramBotModal?.();
+            }}
+            className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300 font-bold transition-colors"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono">Telegram Mini App</span>
+            <span className="text-[9px] bg-sky-500/20 text-sky-400 px-1.5 py-0.2 rounded-full border border-sky-500/30">
+              ✓ Bot
+            </span>
+          </button>
 
-        <button
-          onClick={() => {
-            soundManager.playClick();
-            triggerHaptic('light');
-            onOpenTelegramBotModal?.();
-          }}
-          className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25 hover:bg-emerald-500/20 transition-all font-mono"
-        >
-          <span>⚡ TG Cloud Sync</span>
-        </button>
-      </div>
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              triggerHaptic('light');
+              onOpenTelegramBotModal?.();
+            }}
+            className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25 hover:bg-emerald-500/20 transition-all font-mono"
+          >
+            <span>⚡ TG Cloud Sync</span>
+          </button>
+        </div>
+      )}
 
       <div className="max-w-md mx-auto flex items-center justify-between gap-2">
         {/* Left: Player Mini Badge */}
@@ -78,7 +83,11 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => {
             soundManager.playClick();
             triggerHaptic('light');
-            onOpenTelegramBotModal?.();
+            if (isInsideTelegram) {
+              onOpenTelegramBotModal?.();
+            } else {
+              onOpenProfile?.();
+            }
           }}
           className="flex items-center gap-2 min-w-0 text-left hover:opacity-90 transition-opacity"
         >

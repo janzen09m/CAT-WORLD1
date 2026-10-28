@@ -308,6 +308,7 @@ export default function App() {
           theme={theme}
           onToggleTheme={handleToggleTheme}
           onOpenTelegramBotModal={() => setShowTelegramModal(true)}
+          onOpenProfile={() => setActiveTab('profile')}
         />
 
         {/* Main Content Area */}

@@ -5,6 +5,7 @@ import {
   triggerHaptic,
   getTelegramUser,
   isTelegramWebApp,
+  isTgCloudStorageSupported,
   saveAchievementsToTelegramCloud,
   shareToTelegram,
 } from '../utils/telegram';
@@ -158,7 +159,7 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Telegram Cloud Storage</span>
+              <span>{isTgCloudStorageSupported() ? 'Telegram Cloud Storage' : 'Account Cloud & Local Storage'}</span>
             </div>
             <span className="text-[10px] font-mono text-slate-400 font-bold">
               {unlockedAchCount} / {player.achievements.length} Badges
@@ -166,7 +167,9 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
           </div>
 
           <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-            All your achievements and game stats are automatically saved to your Telegram account cloud, so you never lose progress across devices!
+            {isTgCloudStorageSupported()
+              ? 'All your achievements and game stats are automatically saved to your Telegram account cloud, so you never lose progress across devices!'
+              : 'All your achievements and game stats are securely saved to your game account and synchronized across sessions!'}
           </p>
 
           {syncStatus && (
@@ -181,7 +184,7 @@ export const TelegramBotModal: React.FC<TelegramBotModalProps> = ({
             className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-sky-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Saving to Telegram Cloud...' : 'Save Achievements to Telegram Cloud'}</span>
+            <span>{isSyncing ? 'Synchronizing Achievements...' : 'Synchronize Achievements'}</span>
           </button>
         </div>
 

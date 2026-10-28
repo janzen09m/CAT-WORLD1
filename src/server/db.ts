@@ -4,8 +4,12 @@ import { PlayerData, LeaderboardEntry, CatSkin } from '../types/game';
 import { CAT_SKINS, GET_CAT_BY_ID } from '../data/catsData';
 import { INITIAL_DAILY_TASKS, INITIAL_ACHIEVEMENTS } from '../data/tasksAndAchievements';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isVercel = Boolean(process.env.VERCEL);
+const DATA_DIR = isVercel
+  ? path.resolve('/tmp', 'catworld_data')
+  : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
+const BUNDLED_DB_FILE = path.resolve(process.cwd(), 'data', 'catworld_store.json');
 
 interface DatabaseStore {
   players: Record<string, PlayerData>;
@@ -20,14 +24,18 @@ let memoryStore: DatabaseStore = {
   nextGlobalMintNumber: 1,
 };
 
-// Initialize file storage
+// Initialize file storage safely across both local Node and Vercel Serverless
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (e) {
+    // If mkdir fails, continue in-memory
   }
-  if (!fs.existsSync(DB_FILE)) {
-    saveToDisk();
-  } else {
+
+  // Check if primary DB file exists
+  if (fs.existsSync(DB_FILE)) {
     try {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
@@ -35,23 +43,28 @@ function ensureDataDir() {
         memoryStore = parsed;
       }
     } catch (e) {
-      console.error('Failed to read db file, using fresh store', e);
+      console.warn('Failed to parse primary db file, checking bundled fallback:', e);
+    }
+  } else if (isVercel && fs.existsSync(BUNDLED_DB_FILE)) {
+    // On Vercel first run: seed from repository data file into /tmp
+    try {
+      const raw = fs.readFileSync(BUNDLED_DB_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.players === 'object') {
+        memoryStore = parsed;
+      }
+      saveToDisk();
+    } catch {
       saveToDisk();
     }
+  } else {
+    saveToDisk();
   }
 
-  // Wipe previous test cats for real Telegram Mini App launch!
-  for (const player of Object.values(memoryStore.players)) {
-    player.ownedCats = {};
-    player.activeCatId = '';
-    player.stats.chestsOpened = 0;
-    player.stats.catsBought = 0;
-    player.chestHistory = [];
-    player.keys = { wooden: 2, blue: 1, epic: 0, legendary: 0 };
-    player.coins = Math.max(player.coins || 0, 500);
+  // Ensure default counter
+  if (!memoryStore.nextGlobalMintNumber || memoryStore.nextGlobalMintNumber < 1) {
+    memoryStore.nextGlobalMintNumber = 1;
   }
-  memoryStore.nextGlobalMintNumber = 1;
-  saveToDisk();
 
   // Number any cats if present
   syncAndNumberAllExistingCats();

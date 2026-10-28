@@ -332,42 +332,44 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       {/* --- TAB 3: ACHIEVEMENTS --- */}
       {activeTab === 'achievements' && (
         <div className="space-y-3">
-          {/* Telegram Cloud Storage Sync Banner */}
-          <div className={`p-3.5 rounded-2xl border transition-all ${
-            isLight
-              ? 'bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 border-sky-200 text-slate-800'
-              : 'bg-gradient-to-r from-sky-950/40 via-slate-900 to-blue-950/40 border-sky-800/50 text-white'
-          }`}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">📱</span>
-                <span className="text-xs font-black text-sky-400">Telegram Cloud Storage</span>
+          {/* Telegram Cloud Storage Sync Banner - only when in Telegram */}
+          {isTelegramWebApp() && (
+            <div className={`p-3.5 rounded-2xl border transition-all ${
+              isLight
+                ? 'bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 border-sky-200 text-slate-800'
+                : 'bg-gradient-to-r from-sky-950/40 via-slate-900 to-blue-950/40 border-sky-800/50 text-white'
+            }`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">📱</span>
+                  <span className="text-xs font-black text-sky-400">Telegram Cloud Storage</span>
+                </div>
+                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  ⚡ Synced to Telegram
+                </span>
               </div>
-              <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                ⚡ Synced to Telegram
-              </span>
-            </div>
-            <p className={`text-[11px] leading-relaxed mb-2.5 ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-              All achievements are stored in your Telegram account cloud! You can safely switch devices and keep all badges.
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-400 font-mono">
-                {player.achievements.filter(a => a.unlocked || a.claimed).length} / {player.achievements.length} Badges Stored in TG Cloud
-              </span>
-              <button
-                onClick={handleSyncToTgCloud}
-                disabled={isSyncingTg}
-                className="py-1 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold text-[10px] shadow-sm flex items-center gap-1 active:scale-95 transition-all"
-              >
-                <span>{isSyncingTg ? 'Saving...' : 'Sync to Telegram'}</span>
-              </button>
-            </div>
-            {tgSyncToast && (
-              <div className="mt-2 p-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold text-center animate-in fade-in">
-                {tgSyncToast}
+              <p className={`text-[11px] leading-relaxed mb-2.5 ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+                All achievements are stored in your Telegram account cloud! You can safely switch devices and keep all badges.
+              </p>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {player.achievements.filter(a => a.unlocked || a.claimed).length} / {player.achievements.length} Badges Stored in TG Cloud
+                </span>
+                <button
+                  onClick={handleSyncToTgCloud}
+                  disabled={isSyncingTg}
+                  className="py-1 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold text-[10px] shadow-sm flex items-center gap-1 active:scale-95 transition-all"
+                >
+                  <span>{isSyncingTg ? 'Saving...' : 'Sync to Telegram'}</span>
+                </button>
               </div>
-            )}
-          </div>
+              {tgSyncToast && (
+                <div className="mt-2 p-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold text-center animate-in fade-in">
+                  {tgSyncToast}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             {player.achievements.map(ach => {

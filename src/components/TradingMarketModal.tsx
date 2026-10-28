@@ -3,7 +3,7 @@ import { PlayerData, TradeListing, Theme, Rarity, CatSkin } from '../types/game'
 import { CatIllustration } from './CatIllustration';
 import { RARITY_CONFIG, GET_CAT_BY_ID } from '../data/catsData';
 import { soundManager } from '../utils/audio';
-import { triggerHaptic, shareToTelegram } from '../utils/telegram';
+import { triggerHaptic, shareToTelegram, isTelegramWebApp } from '../utils/telegram';
 import {
   X,
   Repeat,
@@ -147,13 +147,20 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
     }
   };
 
-  // Share trade request to Telegram
+  // Share trade request (Telegram or Web Share / Clipboard)
   const handleShareTrade = (cat: CatSkin) => {
     soundManager.playClick();
     triggerHaptic('light');
-    shareToTelegram(
-      `🐾 Check out my Unique Cat for trade in CAT WORLD Telegram Mini App!\n⭐ ${cat.name} (Mint #${cat.mintNumber || 1})\n✨ Rarity: ${cat.rarity.toUpperCase()}\n🧸 Toy: ${cat.toy || 'none'}\nPlay & Trade with me here:`
-    );
+    const shareText = `🐾 Check out my Unique Cat for trade in CAT WORLD!\n⭐ ${cat.name} (Mint #${cat.mintNumber || 1})\n✨ Rarity: ${cat.rarity.toUpperCase()}\n🧸 Toy: ${cat.toy || 'none'}\nPlay & Trade with me here: ${window.location.href}`;
+    if (isTelegramWebApp()) {
+      shareToTelegram(shareText);
+    } else if (navigator.share) {
+      navigator.share({ title: 'CAT WORLD Trade', text: shareText, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(shareText);
+      setStatusMsg({ text: '✓ Trade details copied to clipboard!', type: 'success' });
+      setTimeout(() => setStatusMsg(null), 3500);
+    }
   };
 
   // Eligible cats the player can trade
