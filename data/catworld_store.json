@@ -4,17 +4,88 @@
       "id": "CW-DEV-918538",
       "playerName": "Cat Lover",
       "catCustomName": "Snowflake",
-      "activeCatId": "",
+      "activeCatId": "ucat-1793217562997-283",
       "createdAt": "2026-10-27T14:21:05.656Z",
-      "coins": 730,
+      "coins": 790,
       "starShards": 0,
       "keys": {
-        "wooden": 2,
-        "blue": 1,
+        "wooden": 1,
+        "blue": 0,
         "epic": 0,
         "legendary": 0
       },
-      "ownedCats": {},
+      "ownedCats": {
+        "ucat-1793217562997-283": {
+          "count": 1,
+          "unlockedAt": "2026-10-28T19:59:22.997Z",
+          "isFavorite": false,
+          "customSkin": {
+            "id": "ucat-1793217562997-283",
+            "name": "Sapphire Echo #1",
+            "rarity": "rare",
+            "price": 7467,
+            "collectorValue": 240,
+            "resaleValue": 2987,
+            "duplicateCoinBonus": 1493,
+            "description": "Rare cat featuring expressive sleepy-chic eyes, stylized folded-scottish ears, and a beloved fish-bone toy!",
+            "category": "Magic",
+            "visualEffect": "crystal-flare",
+            "furColor": "#06B6D4",
+            "bellyColor": "#ECFEFF",
+            "eyeColor": "#F97316",
+            "earInnerColor": "#A5F3FC",
+            "noseColor": "#FDA4AF",
+            "patternType": "sparkle",
+            "patternColor": "#0891B2",
+            "accessory": "none",
+            "mintNumber": 1,
+            "dna": "4704-6791-5E5C",
+            "generation": 1,
+            "personality": "Royal & Majestic",
+            "earType": "folded-scottish",
+            "eyeType": "sleepy-chic",
+            "renderStyle": "2d-expressive",
+            "toy": "fish-bone",
+            "backgroundType": "none",
+            "isProcedural": true
+          }
+        },
+        "ucat-1793217568772-611": {
+          "count": 1,
+          "unlockedAt": "2026-10-28T19:59:28.772Z",
+          "isFavorite": false,
+          "customSkin": {
+            "id": "ucat-1793217568772-611",
+            "name": "Hazel Whisper #2",
+            "rarity": "uncommon",
+            "price": 1539,
+            "collectorValue": 51,
+            "resaleValue": 616,
+            "duplicateCoinBonus": 308,
+            "description": "Harmonious 2D feline with perfectly matching palette. Unique Mint #2.",
+            "category": "Standard",
+            "visualEffect": "none",
+            "furColor": "#78350F",
+            "bellyColor": "#FEF3C7",
+            "eyeColor": "#14B8A6",
+            "earInnerColor": "#FDE68A",
+            "noseColor": "#FDA4AF",
+            "patternType": "solid",
+            "patternColor": "#451A03",
+            "accessory": "none",
+            "mintNumber": 2,
+            "dna": "74F1-9FBF-2FBF",
+            "generation": 1,
+            "personality": "Mischievous Trickster",
+            "earType": "pointed",
+            "eyeType": "round",
+            "renderStyle": "2d-harmonious",
+            "toy": "none",
+            "backgroundType": "none",
+            "isProcedural": true
+          }
+        }
+      },
       "roomBackground": "beach_sunset",
       "stats": {
         "gamesPlayed": 18,
@@ -24,11 +95,11 @@
         "chessWins": 2,
         "memoryWins": 0,
         "catCatchHighScore": 1100,
-        "chestsOpened": 0,
+        "chestsOpened": 2,
         "catsBought": 0,
         "keysBought": 6,
         "totalCoinsEarned": 644,
-        "petCount": 73
+        "petCount": 79
       },
       "dailyTasks": [
         {
@@ -72,9 +143,9 @@
           "title": "Purr Therapy",
           "description": "Pet your cat 5 times in the Cat Room",
           "goal": 5,
-          "current": 0,
+          "current": 5,
           "rewardCoins": 60,
-          "claimed": false
+          "claimed": true
         }
       ],
       "achievements": [
@@ -84,7 +155,7 @@
           "description": "Open your very first treasure chest",
           "category": "chests",
           "goal": 1,
-          "current": 4,
+          "current": 2,
           "rewardCoins": 300,
           "unlocked": true,
           "claimed": true
@@ -95,7 +166,7 @@
           "description": "Own at least 5 different cat skins",
           "category": "collection",
           "goal": 5,
-          "current": 4,
+          "current": 2,
           "rewardCoins": 750,
           "unlocked": true,
           "claimed": true
@@ -106,7 +177,7 @@
           "description": "Own at least 15 different cat skins",
           "category": "collection",
           "goal": 15,
-          "current": 4,
+          "current": 2,
           "rewardCoins": 2500,
           "unlocked": false,
           "claimed": false
@@ -117,7 +188,7 @@
           "description": "Own at least 30 different cat skins",
           "category": "collection",
           "goal": 30,
-          "current": 4,
+          "current": 2,
           "rewardCoins": 8000,
           "unlocked": false,
           "claimed": false
@@ -128,7 +199,7 @@
           "description": "Collect all 50+ legendary and mythic cats",
           "category": "collection",
           "goal": 50,
-          "current": 4,
+          "current": 2,
           "rewardCoins": 35000,
           "unlocked": false,
           "claimed": false
@@ -203,9 +274,30 @@
       "loginStreak": 2,
       "lastLoginDate": "2026-10-28",
       "dailyLoginClaimedToday": false,
-      "chestHistory": []
+      "chestHistory": [
+        {
+          "id": "ch-1793217568772",
+          "timestamp": 1793217568772,
+          "chestId": "wooden",
+          "catId": "ucat-1793217568772-611",
+          "catName": "Hazel Whisper #2",
+          "rarity": "uncommon",
+          "isDuplicate": false,
+          "coinsAwarded": 0
+        },
+        {
+          "id": "ch-1793217562997",
+          "timestamp": 1793217562997,
+          "chestId": "blue",
+          "catId": "ucat-1793217562997-283",
+          "catName": "Sapphire Echo #1",
+          "rarity": "rare",
+          "isDuplicate": false,
+          "coinsAwarded": 0
+        }
+      ]
     }
   },
   "serverStartedAt": "2026-10-27T14:21:00.430Z",
-  "nextGlobalMintNumber": 1
+  "nextGlobalMintNumber": 3
 }

@@ -94,16 +94,23 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
           </button>
         )}
 
-        {/* 1. NIVEAU: 1 BIS 5 STERNE */}
-        <div className="text-center pt-1 mb-2">
-          <div className="flex items-center justify-center gap-1.5 mb-1">
+        {/* 1. STERNE & SELTENHEIT KASTEN */}
+        <div
+          className="my-2 px-3.5 py-2.5 rounded-2xl border flex items-center justify-between gap-3 shadow-xs"
+          style={{
+            backgroundColor: `${rarityMeta.color}15`,
+            borderColor: `${rarityMeta.color}45`,
+          }}
+        >
+          {/* 1 bis 5 Sterne */}
+          <div className="flex items-center gap-1">
             {Array.from({ length: 5 }).map((_, idx) => {
               const isFilled = idx < starCount;
               return (
                 <span
                   key={idx}
-                  className={`text-lg transition-transform ${
-                    isFilled ? 'text-amber-400 scale-110 drop-shadow-sm' : isLight ? 'text-slate-200' : 'text-slate-700'
+                  className={`text-base font-black leading-none ${
+                    isFilled ? 'text-amber-400 drop-shadow-xs' : isLight ? 'text-slate-300' : 'text-slate-700'
                   }`}
                 >
                   ★
@@ -111,16 +118,24 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               );
             })}
           </div>
-          <span
-            className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider font-mono"
-            style={{
-              backgroundColor: `${rarityMeta.color}20`,
-              color: rarityMeta.color,
-              border: `1px solid ${rarityMeta.color}40`,
-            }}
-          >
-            Niveau {starCount} • {rarityMeta.name}
-          </span>
+
+          {/* Was es bedeutet: Common / Uncommon / Rare / Epic / Legendary / Mythic */}
+          <div className="flex items-center gap-1.5 font-mono">
+            <span
+              className="text-[11px] font-black uppercase tracking-wide px-2 py-0.5 rounded-lg text-white"
+              style={{ backgroundColor: rarityMeta.color }}
+            >
+              {rarityMeta.name}
+            </span>
+            <span className={`text-[11px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+              {cat.rarity === 'common' && '• Gewöhnlich'}
+              {cat.rarity === 'uncommon' && '• Ungewöhnlich'}
+              {cat.rarity === 'rare' && '• Selten'}
+              {cat.rarity === 'epic' && '• Episch 3D'}
+              {cat.rarity === 'legendary' && '• Legendär Flauschig'}
+              {cat.rarity === 'mythic' && '• Mythisch 24K'}
+            </span>
+          </div>
         </div>
 
         {/* 2. KATZEN STICKER */}

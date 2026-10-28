@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlayerData, CatSkin, ChestConfig, KeyType, Rarity, Theme, Achievement } from './types/game';
 import { GET_CAT_BY_ID } from './data/catsData';
+import { INITIAL_DAILY_TASKS, INITIAL_ACHIEVEMENTS } from './data/tasksAndAchievements';
 import {
   initTelegramApp,
   getTelegramInitData,
@@ -59,6 +60,48 @@ export default function App() {
     });
   }, []);
 
+  const createFallbackPlayer = (id: string): PlayerData => {
+    try {
+      const cached = localStorage.getItem(`catworld_player_cache_${id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.id) return parsed;
+      }
+    } catch {}
+    return {
+      id,
+      playerName: 'Cat Lover',
+      catCustomName: 'Snowflake',
+      activeCatId: '',
+      createdAt: new Date().toISOString(),
+      coins: 500,
+      starShards: 0,
+      keys: { wooden: 2, blue: 1, epic: 0, legendary: 0 },
+      ownedCats: {},
+      roomBackground: 'cozy_living',
+      stats: {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        tictactoeWins: 0,
+        tennisWins: 0,
+        chessWins: 0,
+        memoryWins: 0,
+        catCatchHighScore: 0,
+        chestsOpened: 0,
+        catsBought: 0,
+        keysBought: 0,
+        totalCoinsEarned: 500,
+        petCount: 0,
+      },
+      dailyTasks: INITIAL_DAILY_TASKS,
+      achievements: INITIAL_ACHIEVEMENTS,
+      loginStreak: 1,
+      lastLoginDate: new Date().toISOString().split('T')[0],
+      dailyLoginClaimedToday: false,
+      chestHistory: [],
+    };
+  };
+
   // Initialize game & authenticate
   const initGame = useCallback(async () => {
     setIsLoading(true);
@@ -74,6 +117,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData, devPlayerId }),
       });
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
 
       const data = await res.json();
       if (data.success && data.player) {
@@ -103,6 +150,10 @@ export default function App() {
           // ignore
         }
 
+        try {
+          localStorage.setItem(`catworld_player_cache_${currentPlayer.id}`, JSON.stringify(currentPlayer));
+        } catch {}
+
         setPlayer(currentPlayer);
         setCollectorValue(data.collectorValue || 0);
 
@@ -112,10 +163,18 @@ export default function App() {
           setShowOnboarding(true);
         }
       } else {
-        setInitError('Failed to load player profile');
+        throw new Error('Invalid player response');
       }
     } catch (err: any) {
-      setInitError('Connection error to game server');
+      console.warn('Game server sync delayed, booting resilient session:', err);
+      // Fallback: player never gets blocked by server connection errors
+      const fallback = createFallbackPlayer(devPlayerId);
+      setPlayer(fallback);
+      setCollectorValue(0);
+      const hasSeenOnboarding = localStorage.getItem(`catworld_onboarded_${fallback.id}`);
+      if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -141,6 +200,9 @@ export default function App() {
       throw new Error(data.error || 'Action failed');
     }
     if (data.player) {
+      try {
+        localStorage.setItem(`catworld_player_cache_${data.player.id}`, JSON.stringify(data.player));
+      } catch {}
       setPlayer(data.player);
       // Auto-save all achievements to Telegram Cloud on every progress action
       saveAchievementsToTelegramCloud(data.player.achievements, data.player.stats).catch(() => {});
