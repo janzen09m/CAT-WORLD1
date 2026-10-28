@@ -301,7 +301,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
                   )}
 
                   <div className="py-2">
-                    <CatIllustration cat={cat} size={90} />
+                    <CatIllustration cat={cat} size={90} pixelBlur={false} />
                   </div>
 
                   <div className="w-full">
@@ -449,13 +449,21 @@ export const ShopView: React.FC<ShopViewProps> = ({
             <h3 className={`text-lg font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Confirm Purchase</h3>
 
             <div className="flex justify-center -my-2">
-              <CatIllustration cat={selectedCatToBuy} size={130} />
+              <CatIllustration
+                cat={selectedCatToBuy}
+                size={130}
+                pixelBlur={!player.ownedCats[selectedCatToBuy.id]}
+              />
             </div>
 
             <div>
-              <div className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>{selectedCatToBuy.name}</div>
+              <div className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                {player.ownedCats[selectedCatToBuy.id] ? selectedCatToBuy.name : 'Mystery Skin (Locked)'}
+              </div>
               <p className={`text-xs mt-1 italic ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
-                "{selectedCatToBuy.description}"
+                {player.ownedCats[selectedCatToBuy.id]
+                  ? `"${selectedCatToBuy.description}"`
+                  : '🔒 Purchasing this cat will permanently unlock and reveal its hidden pixel-blurred artwork!'}
               </p>
             </div>
 

@@ -6,12 +6,54 @@ import {
   savePlayer,
   getLeaderboard,
   calculateCollectorValue,
+  getNextGlobalMintNumber,
 } from './db';
 import { CAT_SKINS, GET_CAT_BY_ID, getDuplicateCoinBonus } from '../data/catsData';
 import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from '../data/chestsData';
-import { KeyType, Rarity } from '../types/game';
+import { KeyType, Rarity, TradeListing, CatSkin } from '../types/game';
+import { generateUniqueCat } from '../utils/catGenerator';
 
 export const apiRouter = Router();
+
+// In-memory Telegram Cat Trading Market Listings
+const MARKET_LISTINGS: TradeListing[] = [
+  {
+    id: 'listing-1',
+    sellerName: 'Alex_TG',
+    sellerTelegram: 'alex_tg_collector',
+    cat: generateUniqueCat('rare', 1042),
+    priceCoins: 3800,
+    wantsRarity: 'rare',
+    createdAt: Date.now() - 3600000,
+  },
+  {
+    id: 'listing-2',
+    sellerName: 'MeowMaster',
+    sellerTelegram: 'meow_master_99',
+    cat: generateUniqueCat('epic', 1088),
+    priceCoins: 8500,
+    wantsRarity: 'epic',
+    createdAt: Date.now() - 7200000,
+  },
+  {
+    id: 'listing-3',
+    sellerName: 'Elena_Kitties',
+    sellerTelegram: 'elena_cats',
+    cat: generateUniqueCat('uncommon', 1015),
+    priceCoins: 1400,
+    wantsRarity: 'uncommon',
+    createdAt: Date.now() - 1800000,
+  },
+  {
+    id: 'listing-4',
+    sellerName: 'CosmicCollector',
+    sellerTelegram: 'cosmic_tg',
+    cat: generateUniqueCat('legendary', 1099),
+    priceCoins: 28000,
+    wantsRarity: 'legendary',
+    createdAt: Date.now() - 900000,
+  },
+];
 
 // Middleware to extract player ID from headers or body
 function getAuthenticatedPlayer(req: Request): ReturnType<typeof getPlayer> {
@@ -173,35 +215,30 @@ apiRouter.post('/shop/buy-cat', (req: Request, res: Response) => {
   const player = getAuthenticatedPlayer(req);
   if (!player) return res.status(401).json({ error: 'Player not found' });
 
-  const { catId } = req.body;
-  const skin = GET_CAT_BY_ID(catId);
-  if (!skin) return res.status(404).json({ error: 'Cat skin not found' });
+  const { catId, rarity } = req.body;
+  const baseSkin = catId ? GET_CAT_BY_ID(catId) : null;
+  const targetRarity: Rarity = (rarity || baseSkin?.rarity || 'common') as Rarity;
+  const price = baseSkin?.price || (targetRarity === 'common' ? 500 : targetRarity === 'uncommon' ? 1500 : targetRarity === 'rare' ? 4000 : targetRarity === 'epic' ? 12000 : 35000);
 
   // Check currency
-  if (player.coins < skin.price) {
+  if (player.coins < price) {
     return res.status(400).json({ error: 'Not enough coins!' });
   }
 
   // Deduct
-  player.coins -= skin.price;
+  player.coins -= price;
   player.stats.catsBought = (player.stats.catsBought || 0) + 1;
 
   const now = new Date().toISOString();
-  let isDuplicate = false;
+  const nextMintNumber = getNextGlobalMintNumber();
+  const newCat = generateUniqueCat(targetRarity, nextMintNumber);
 
-  if (player.ownedCats[catId]) {
-    // Already owned
-    isDuplicate = true;
-    player.ownedCats[catId].count += 1;
-    // Duplicate bonus handled with duplicateCoinsGained below
-  } else {
-    // New
-    player.ownedCats[catId] = {
-      count: 1,
-      unlockedAt: now,
-      isFavorite: false,
-    };
-  }
+  player.ownedCats[newCat.id] = {
+    count: 1,
+    unlockedAt: now,
+    isFavorite: false,
+    customSkin: newCat,
+  };
 
   // Check collection achievements
   const ownedCount = Object.keys(player.ownedCats).length;
@@ -213,19 +250,13 @@ apiRouter.post('/shop/buy-cat', (req: Request, res: Response) => {
     if (ach.current >= ach.goal) ach.unlocked = true;
   });
 
-  let duplicateCoinsGained = 0;
-  if (isDuplicate) {
-    duplicateCoinsGained = getDuplicateCoinBonus(skin);
-    player.coins += duplicateCoinsGained;
-  }
-
   savePlayer(player);
   res.json({
     success: true,
     player,
-    skin,
-    isDuplicate,
-    duplicateCoinsGained,
+    skin: newCat,
+    isDuplicate: false,
+    duplicateCoinsGained: 0,
     starShardsGained: 0,
   });
 });
@@ -325,39 +356,36 @@ apiRouter.post('/chests/open', (req: Request, res: Response) => {
   const requiredKey = chest.keyRequired;
   const hasKey = (player.keys[requiredKey] || 0) >= 1;
 
-  // Deduct key or coins
-  if (hasKey) {
-    player.keys[requiredKey] -= 1;
-  } else if (useCoins) {
-    if (player.coins < chest.coinPrice) {
-      return res.status(400).json({ error: 'Not enough coins to open this chest!' });
-    }
-    player.coins -= chest.coinPrice;
-  } else {
-    return res.status(400).json({ error: `You need a ${KEY_EXCHANGE_RATES[requiredKey].name} or ${chest.coinPrice} Coins!` });
+  // Chests can ONLY be opened with keys!
+  if (!hasKey) {
+    return res.status(400).json({
+      error: `Diese Kiste kann nur mit einem ${KEY_EXCHANGE_RATES[requiredKey].name} geöffnet werden! Kaufe Schlüssel im Shop mit deinen Münzen.`
+    });
   }
+
+  // Deduct key
+  player.keys[requiredKey] -= 1;
 
   // Authoritative server drop roll
   const rolledRarity = rollChestReward(chest.dropRates);
-  const eligibleCats = CAT_SKINS.filter(c => c.rarity === rolledRarity);
-  const droppedCat = eligibleCats[Math.floor(Math.random() * eligibleCats.length)] || eligibleCats[0] || CAT_SKINS[0];
+  const nextMintNumber = getNextGlobalMintNumber();
+  // Generate a completely UNIQUE procedural cat with global Mint # and DNA!
+  const droppedCat = generateUniqueCat(rolledRarity, nextMintNumber);
 
   const now = new Date().toISOString();
-  let isDuplicate = false;
-  let coinsAwarded = 0;
+  const isDuplicate = false;
+  const coinsAwarded = 0;
 
-  if (player.ownedCats[droppedCat.id]) {
-    isDuplicate = true;
-    player.ownedCats[droppedCat.id].count += 1;
-    // Duplicates grant bonus Coins!
-    coinsAwarded = getDuplicateCoinBonus(droppedCat);
-    player.coins += coinsAwarded;
-  } else {
-    player.ownedCats[droppedCat.id] = {
-      count: 1,
-      unlockedAt: now,
-      isFavorite: false,
-    };
+  player.ownedCats[droppedCat.id] = {
+    count: 1,
+    unlockedAt: now,
+    isFavorite: false,
+    customSkin: droppedCat,
+  };
+
+  // If player doesn't have an active cat yet, equip this first cat automatically!
+  if (!player.activeCatId || !player.ownedCats[player.activeCatId]) {
+    player.activeCatId = droppedCat.id;
   }
 
   // Update stats
@@ -590,4 +618,115 @@ apiRouter.post('/achievements/claim', (req: Request, res: Response) => {
 apiRouter.get('/leaderboard', (_req: Request, res: Response) => {
   const leaderboards = getLeaderboard();
   res.json({ success: true, leaderboards });
+});
+
+// ==========================================
+// TELEGRAM CAT TRADING MARKETPLACE ENDPOINTS
+// ==========================================
+
+// GET /api/market/listings
+apiRouter.get('/market/listings', (_req: Request, res: Response) => {
+  res.json({ success: true, listings: MARKET_LISTINGS });
+});
+
+// POST /api/market/buy
+apiRouter.post('/market/buy', (req: Request, res: Response) => {
+  const player = getAuthenticatedPlayer(req);
+  if (!player) return res.status(401).json({ error: 'Player not found' });
+
+  const { listingId } = req.body;
+  const index = MARKET_LISTINGS.findIndex(l => l.id === listingId);
+  if (index === -1) return res.status(404).json({ error: 'Trade listing no longer available' });
+
+  const listing = MARKET_LISTINGS[index];
+  if (player.coins < listing.priceCoins) {
+    return res.status(400).json({ error: `Not enough coins! You need ${listing.priceCoins} Coins.` });
+  }
+
+  // Deduct coins & add unique cat to collection
+  player.coins -= listing.priceCoins;
+  const now = new Date().toISOString();
+  player.ownedCats[listing.cat.id] = {
+    count: 1,
+    unlockedAt: now,
+    isFavorite: false,
+    customSkin: listing.cat,
+  };
+
+  // Remove from market and auto-generate fresh Telegram community listing
+  MARKET_LISTINGS.splice(index, 1);
+  const freshRarities: Rarity[] = ['uncommon', 'rare', 'epic', 'legendary'];
+  const newRarity = freshRarities[Math.floor(Math.random() * freshRarities.length)];
+  const communityNames = ['CryptoCat_99', 'SatoshiWhiskers', 'NekoMaster', 'TelegramTrader', 'LunaCollector', 'PixelPaw_TG'];
+  MARKET_LISTINGS.push({
+    id: `listing-${Date.now()}`,
+    sellerName: communityNames[Math.floor(Math.random() * communityNames.length)],
+    sellerTelegram: 'tg_community',
+    cat: generateUniqueCat(newRarity),
+    priceCoins: newRarity === 'uncommon' ? 1500 : newRarity === 'rare' ? 4200 : newRarity === 'epic' ? 9500 : 30000,
+    wantsRarity: newRarity,
+    createdAt: Date.now(),
+  });
+
+  savePlayer(player);
+  res.json({ success: true, player, boughtCat: listing.cat, listings: MARKET_LISTINGS });
+});
+
+// POST /api/market/trade (Cat-for-Cat swap!)
+apiRouter.post('/market/trade', (req: Request, res: Response) => {
+  const player = getAuthenticatedPlayer(req);
+  if (!player) return res.status(401).json({ error: 'Player not found' });
+
+  const { listingId, offeredCatId } = req.body;
+  const index = MARKET_LISTINGS.findIndex(l => l.id === listingId);
+  if (index === -1) return res.status(404).json({ error: 'Trade listing no longer available' });
+
+  const listing = MARKET_LISTINGS[index];
+  const offeredOwned = player.ownedCats[offeredCatId];
+  if (!offeredOwned) {
+    return res.status(400).json({ error: 'You do not own this cat to trade!' });
+  }
+
+  // Active cat cannot be traded away
+  if (player.activeCatId === offeredCatId) {
+    return res.status(400).json({ error: 'Cannot trade your currently active cat! Equip a different cat first.' });
+  }
+
+  const offeredCatSkin = offeredOwned.customSkin || GET_CAT_BY_ID(offeredCatId);
+
+  // Transfer offered cat out
+  if (offeredOwned.count > 1) {
+    offeredOwned.count -= 1;
+  } else {
+    delete player.ownedCats[offeredCatId];
+  }
+
+  // Transfer received cat in
+  const now = new Date().toISOString();
+  player.ownedCats[listing.cat.id] = {
+    count: 1,
+    unlockedAt: now,
+    isFavorite: false,
+    customSkin: listing.cat,
+  };
+
+  // Replace listing with offered cat
+  MARKET_LISTINGS[index] = {
+    id: `listing-trade-${Date.now()}`,
+    sellerName: player.playerName,
+    sellerTelegram: player.telegramUsername,
+    cat: offeredCatSkin,
+    priceCoins: offeredCatSkin.price,
+    wantsRarity: listing.cat.rarity,
+    createdAt: Date.now(),
+  };
+
+  savePlayer(player);
+  res.json({
+    success: true,
+    player,
+    receivedCat: listing.cat,
+    tradedAway: offeredCatSkin,
+    listings: MARKET_LISTINGS,
+  });
 });

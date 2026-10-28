@@ -10,12 +10,14 @@ const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
 interface DatabaseStore {
   players: Record<string, PlayerData>;
   serverStartedAt: string;
+  nextGlobalMintNumber?: number;
 }
 
 // In-memory cache
 let memoryStore: DatabaseStore = {
   players: {},
   serverStartedAt: new Date().toISOString(),
+  nextGlobalMintNumber: 1,
 };
 
 // Initialize file storage
@@ -37,6 +39,22 @@ function ensureDataDir() {
       saveToDisk();
     }
   }
+
+  // Wipe previous test cats for real Telegram Mini App launch!
+  for (const player of Object.values(memoryStore.players)) {
+    player.ownedCats = {};
+    player.activeCatId = '';
+    player.stats.chestsOpened = 0;
+    player.stats.catsBought = 0;
+    player.chestHistory = [];
+    player.keys = { wooden: 2, blue: 1, epic: 0, legendary: 0 };
+    player.coins = Math.max(player.coins || 0, 500);
+  }
+  memoryStore.nextGlobalMintNumber = 1;
+  saveToDisk();
+
+  // Number any cats if present
+  syncAndNumberAllExistingCats();
 }
 
 let isWriting = false;
@@ -64,6 +82,89 @@ function saveToDisk() {
   }
 }
 
+/**
+ * Iterates through all existing players and their owned cats,
+ * sorting them chronologically and assigning clean sequential global mint numbers:
+ * First unlocked cat gets #1, next #2, #3, etc.
+ */
+function syncAndNumberAllExistingCats() {
+  interface CatRef {
+    playerId: string;
+    catId: string;
+    unlockedAt: string;
+    info: PlayerData['ownedCats'][string];
+  }
+
+  const allOwnedCats: CatRef[] = [];
+  for (const player of Object.values(memoryStore.players)) {
+    for (const [catId, info] of Object.entries(player.ownedCats)) {
+      allOwnedCats.push({
+        playerId: player.id,
+        catId,
+        unlockedAt: info.unlockedAt || player.createdAt || '2026-01-01',
+        info,
+      });
+    }
+  }
+
+  if (allOwnedCats.length === 0) {
+    memoryStore.nextGlobalMintNumber = 1;
+    saveToDisk();
+    return;
+  }
+
+  // Sort by unlocked timestamp ascending so the first cat unlocked is Global #1
+  allOwnedCats.sort((a, b) => new Date(a.unlockedAt).getTime() - new Date(b.unlockedAt).getTime());
+
+  let serial = 1;
+  let modified = false;
+
+  for (const item of allOwnedCats) {
+    const { catId, info } = item;
+    const base = GET_CAT_BY_ID(catId, info.customSkin);
+    const cleanName = (base.name || 'Cat').replace(/\s*#\d+/, '').trim();
+    const mintNum = serial;
+
+    // Check if renumbering or creation is needed
+    if (!info.customSkin || info.customSkin.mintNumber !== mintNum) {
+      const updatedSkin: CatSkin = {
+        ...base,
+        name: `${cleanName} #${mintNum}`,
+        mintNumber: mintNum,
+        dna: base.dna || `DNA-GLOBAL-${mintNum.toString().padStart(6, '0')}`,
+        generation: base.generation || 1,
+        isProcedural: true,
+        personality: base.personality || 'Original Companion',
+        earType: base.earType || (base.rarity === 'common' ? 'pointed' : (base.rarity === 'uncommon' ? 'rounded' : 'tufted-lynx')),
+        eyeType: base.eyeType || (base.rarity === 'common' || base.rarity === 'uncommon' ? 'round' : 'anime-sparkle'),
+        renderStyle: base.renderStyle || (base.rarity === 'common' ? '2d-flat' : (base.rarity === 'uncommon' ? '2d-harmonious' : (base.rarity === 'rare' ? '2d-expressive' : (base.rarity === 'epic' ? '3d-volumetric' : 'fluffy-legendary')))),
+        toy: base.toy || (base.rarity === 'rare' ? 'yarn-ball' : (base.rarity === 'legendary' || base.rarity === 'mythic' ? 'golden-trophy' : 'none')),
+        backgroundType: base.backgroundType || (base.rarity === 'legendary' ? 'sunset-aurora' : (base.rarity === 'mythic' ? 'golden-throne' : 'none')),
+      };
+
+      info.customSkin = updatedSkin;
+      modified = true;
+    }
+    serial++;
+  }
+
+  memoryStore.nextGlobalMintNumber = serial;
+  if (modified) {
+    saveToDisk();
+  }
+}
+
+// Global Mint sequence generator
+export function getNextGlobalMintNumber(): number {
+  if (!memoryStore.nextGlobalMintNumber || memoryStore.nextGlobalMintNumber < 1) {
+    memoryStore.nextGlobalMintNumber = 1;
+  }
+  const next = memoryStore.nextGlobalMintNumber;
+  memoryStore.nextGlobalMintNumber += 1;
+  saveToDisk();
+  return next;
+}
+
 // Initialize immediately
 ensureDataDir();
 
@@ -77,9 +178,9 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
     telegramUsername: tgUser?.username,
     playerName: tgUser?.name || 'Cat Lover',
     catCustomName: 'Snowflake',
-    activeCatId: 'cat-01',
+    activeCatId: '',
     createdAt: now,
-    coins: 300,
+    coins: 500,
     starShards: 0,
     keys: {
       wooden: 2,
@@ -87,13 +188,7 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
       epic: 0,
       legendary: 0,
     },
-    ownedCats: {
-      'cat-01': {
-        count: 1,
-        unlockedAt: now,
-        isFavorite: true,
-      },
-    },
+    ownedCats: {},
     roomBackground: 'cozy_living',
     stats: {
       gamesPlayed: 0,
@@ -106,7 +201,7 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
       chestsOpened: 0,
       catsBought: 0,
       keysBought: 0,
-      totalCoinsEarned: 300,
+      totalCoinsEarned: 500,
       petCount: 0,
     },
     dailyTasks: JSON.parse(JSON.stringify(INITIAL_DAILY_TASKS)),
@@ -122,6 +217,7 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
   return newPlayer;
 }
 
+
 export function getPlayer(id: string): PlayerData | null {
   const player = memoryStore.players[id];
   if (!player) return null;
@@ -130,6 +226,29 @@ export function getPlayer(id: string): PlayerData | null {
   player.starShards = 0;
   if (player.stats.keysBought === undefined) {
     player.stats.keysBought = 0;
+  }
+
+  // Check if any owned cats lack customSkin or mintNumber
+  let needsSave = false;
+  for (const [catId, info] of Object.entries(player.ownedCats)) {
+    if (!info.customSkin || !info.customSkin.mintNumber) {
+      const mintNum = getNextGlobalMintNumber();
+      const base = GET_CAT_BY_ID(catId, info.customSkin);
+      const cleanName = (base.name || 'Cat').replace(/\s*#\d+/, '').trim();
+      info.customSkin = {
+        ...base,
+        name: `${cleanName} #${mintNum}`,
+        mintNumber: mintNum,
+        dna: base.dna || `DNA-GLOBAL-${mintNum.toString().padStart(6, '0')}`,
+        generation: 1,
+        isProcedural: true,
+      };
+      needsSave = true;
+    }
+  }
+
+  if (needsSave) {
+    saveToDisk();
   }
 
   // Check daily reset
@@ -181,7 +300,7 @@ function checkDailyReset(player: PlayerData): void {
 export function calculateCollectorValue(player: PlayerData): number {
   let total = 0;
   for (const [catId, info] of Object.entries(player.ownedCats)) {
-    const skin = GET_CAT_BY_ID(catId);
+    const skin = GET_CAT_BY_ID(catId, info.customSkin);
     if (skin) {
       total += skin.collectorValue;
       if (info.count > 1) {
@@ -257,14 +376,16 @@ export function getLeaderboard(): {
   ];
 
   const realEntries: LeaderboardEntry[] = all.map(p => {
-    const activeSkin = GET_CAT_BY_ID(p.activeCatId);
+    const activeSkin = p.activeCatId && p.ownedCats[p.activeCatId]
+      ? GET_CAT_BY_ID(p.activeCatId, p.ownedCats[p.activeCatId]?.customSkin)
+      : null;
     return {
       id: p.id,
       playerName: p.playerName,
       catCustomName: p.catCustomName,
-      activeCatId: p.activeCatId,
-      activeCatName: activeSkin.name,
-      activeCatRarity: activeSkin.rarity,
+      activeCatId: p.activeCatId || '',
+      activeCatName: activeSkin ? activeSkin.name : 'Keine Katze',
+      activeCatRarity: activeSkin ? activeSkin.rarity : 'common',
       collectorValue: calculateCollectorValue(p),
       catsCount: Object.keys(p.ownedCats).length,
       gamesWon: p.stats.gamesWon || 0,

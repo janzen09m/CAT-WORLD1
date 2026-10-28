@@ -14,7 +14,7 @@ describe('CAT WORLD - Game Mechanics & Economics Tests', () => {
 
     // Check starter cat
     const starterCat = GET_CAT_BY_ID('cat-01');
-    assert.strictEqual(starterCat.name, 'Weiße Katze');
+    assert.strictEqual(starterCat.name, 'White Cat');
     assert.strictEqual(starterCat.rarity, 'common');
   });
 
@@ -32,16 +32,16 @@ describe('CAT WORLD - Game Mechanics & Economics Tests', () => {
     }
   });
 
-  it('should correctly calculate key to star shard conversion rates', () => {
-    assert.strictEqual(KEY_EXCHANGE_RATES.wooden.shardsPerKey, 10);
-    assert.strictEqual(KEY_EXCHANGE_RATES.blue.shardsPerKey, 40);
-    assert.strictEqual(KEY_EXCHANGE_RATES.epic.shardsPerKey, 160);
-    assert.strictEqual(KEY_EXCHANGE_RATES.legendary.shardsPerKey, 550);
+  it('should correctly configure key purchase rates with coins', () => {
+    assert.strictEqual(KEY_EXCHANGE_RATES.wooden.coinPrice, 150);
+    assert.strictEqual(KEY_EXCHANGE_RATES.blue.coinPrice, 550);
+    assert.strictEqual(KEY_EXCHANGE_RATES.epic.coinPrice, 2200);
+    assert.strictEqual(KEY_EXCHANGE_RATES.legendary.coinPrice, 7000);
 
-    // Multi-key conversion calculation
+    // Multi-key coin cost calculation
     const qty = 3;
-    const earned = qty * KEY_EXCHANGE_RATES.blue.shardsPerKey;
-    assert.strictEqual(earned, 120);
+    const totalCost = qty * KEY_EXCHANGE_RATES.blue.coinPrice;
+    assert.strictEqual(totalCost, 1650);
   });
 
   it('should properly execute chess moves and detect check using chess.js', () => {
@@ -69,7 +69,7 @@ describe('CAT WORLD - Game Mechanics & Economics Tests', () => {
   it('should ensure the completely golden cat is the most expensive cat in the game', () => {
     const goldCat = GET_CAT_BY_ID('cat-53');
     assert.ok(goldCat, 'cat-53 must exist');
-    assert.strictEqual(goldCat.name, 'Komplett Goldene Katze Midas');
+    assert.strictEqual(goldCat.name, 'Pure Solid Gold Cat Midas');
     assert.strictEqual(goldCat.rarity, 'mythic');
     assert.strictEqual(goldCat.specialTrait, 'pure-gold');
 

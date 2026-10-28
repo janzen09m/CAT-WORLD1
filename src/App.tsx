@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { PlayerData, CatSkin, ChestConfig, KeyType, Rarity, Theme } from './types/game';
+import { PlayerData, CatSkin, ChestConfig, KeyType, Rarity, Theme, Achievement } from './types/game';
 import { GET_CAT_BY_ID } from './data/catsData';
-import { initTelegramApp, getTelegramInitData, getOrCreateLocalDevId, isTelegramWebApp } from './utils/telegram';
+import {
+  initTelegramApp,
+  getTelegramInitData,
+  getOrCreateLocalDevId,
+  isTelegramWebApp,
+  saveAchievementsToTelegramCloud,
+  loadAchievementsFromTelegramCloud,
+} from './utils/telegram';
 import { soundManager } from './utils/audio';
 
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { OnboardingModal } from './components/OnboardingModal';
 import { ConvertKeysModal } from './components/ConvertKeysModal';
+import { TelegramBotModal } from './components/TelegramBotModal';
+import { TradingMarketModal } from './components/TradingMarketModal';
 
 import { HomeView } from './components/views/HomeView';
 import { CatsCollectionView } from './components/views/CatsCollectionView';
@@ -22,6 +31,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [showTradingModal, setShowTradingModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -66,7 +77,33 @@ export default function App() {
 
       const data = await res.json();
       if (data.success && data.player) {
-        setPlayer(data.player);
+        let currentPlayer = data.player;
+
+        // Auto-load & merge achievements from Telegram CloudStorage
+        try {
+          const tgData = await loadAchievementsFromTelegramCloud();
+          if (tgData?.achievements && Array.isArray(tgData.achievements)) {
+            const mergedAchievements = currentPlayer.achievements.map((localAch: Achievement) => {
+              const cloudAch = tgData.achievements?.find((c: Achievement) => c.id === localAch.id);
+              if (cloudAch) {
+                return {
+                  ...localAch,
+                  unlocked: localAch.unlocked || cloudAch.unlocked,
+                  claimed: localAch.claimed || cloudAch.claimed,
+                  current: Math.max(localAch.current, cloudAch.current || 0),
+                };
+              }
+              return localAch;
+            });
+            currentPlayer = { ...currentPlayer, achievements: mergedAchievements };
+          }
+          // Ensure synced back to Telegram Cloud
+          saveAchievementsToTelegramCloud(currentPlayer.achievements, currentPlayer.stats).catch(() => {});
+        } catch {
+          // ignore
+        }
+
+        setPlayer(currentPlayer);
         setCollectorValue(data.collectorValue || 0);
 
         // First time onboarding check: if player has not customized names yet
@@ -105,6 +142,8 @@ export default function App() {
     }
     if (data.player) {
       setPlayer(data.player);
+      // Auto-save all achievements to Telegram Cloud on every progress action
+      saveAchievementsToTelegramCloud(data.player.achievements, data.player.stats).catch(() => {});
     }
     return data;
   };
@@ -243,7 +282,9 @@ export default function App() {
     );
   }
 
-  const activeCat = GET_CAT_BY_ID(player.activeCatId);
+  const activeCat = (player.activeCatId && player.ownedCats[player.activeCatId])
+    ? GET_CAT_BY_ID(player.activeCatId, player.ownedCats[player.activeCatId]?.customSkin)
+    : null;
   const unclaimedRewardsCount =
     player.dailyTasks.filter(t => !t.claimed && t.current >= t.goal).length +
     player.achievements.filter(a => !a.claimed && a.unlocked).length +
@@ -266,6 +307,7 @@ export default function App() {
           collectorValue={collectorValue}
           theme={theme}
           onToggleTheme={handleToggleTheme}
+          onOpenTelegramBotModal={() => setShowTelegramModal(true)}
         />
 
         {/* Main Content Area */}
@@ -290,6 +332,7 @@ export default function App() {
               onEquipCat={handleEquipCat}
               onToggleFavorite={handleToggleFavorite}
               onGoToShop={() => setActiveTab('shop')}
+              onOpenTradingMarket={() => setShowTradingModal(true)}
               theme={theme}
             />
           )}
@@ -357,6 +400,25 @@ export default function App() {
             player={player}
             onClose={() => setShowConvertModal(false)}
             onBuyKey={handleBuyKeysModal}
+            theme={theme}
+          />
+        )}
+
+        {/* Telegram Bot Hub & Cloud Storage Modal */}
+        {showTelegramModal && (
+          <TelegramBotModal
+            player={player}
+            onClose={() => setShowTelegramModal(false)}
+            theme={theme}
+          />
+        )}
+
+        {/* Telegram Cat Trading Marketplace Modal */}
+        {showTradingModal && (
+          <TradingMarketModal
+            player={player}
+            onClose={() => setShowTradingModal(false)}
+            onTradeSuccess={updatedPlayer => setPlayer(updatedPlayer)}
             theme={theme}
           />
         )}

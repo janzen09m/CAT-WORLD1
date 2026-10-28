@@ -23,17 +23,18 @@ export const CatCard: React.FC<CatCardProps> = ({
 }) => {
   const ownedInfo = player.ownedCats[cat.id];
   const isOwned = !!ownedInfo;
-  const isActive = player.activeCatId === cat.id;
+  const displayCat = ownedInfo?.customSkin || cat;
+  const isActive = player.activeCatId === displayCat.id || player.activeCatId === cat.id;
   const isFavorite = ownedInfo?.isFavorite ?? false;
 
-  const rarityMeta = RARITY_CONFIG[cat.rarity];
+  const rarityMeta = RARITY_CONFIG[displayCat.rarity];
   const isLight = theme === 'light';
 
   return (
     <div
       onClick={() => {
         soundManager.playClick();
-        onSelect(cat);
+        onSelect(displayCat);
       }}
       className={`relative rounded-2xl p-2.5 flex flex-col items-center cursor-pointer transition-all duration-200 border select-none group ${
         isActive
@@ -49,7 +50,7 @@ export const CatCard: React.FC<CatCardProps> = ({
           : 'bg-slate-900/60 border-slate-800/80 opacity-70 hover:opacity-90'
       }`}
     >
-      {/* Top Bar on Card: Favorite & Owned Count */}
+      {/* Top Bar on Card: Favorite & Owned Count / Mint */}
       <div className="w-full flex items-center justify-between z-10 -mb-1">
         {/* Favorite Button */}
         {isOwned ? (
@@ -72,14 +73,15 @@ export const CatCard: React.FC<CatCardProps> = ({
           <div className="w-4" />
         )}
 
-        {/* Owned Count or Lock */}
+        {/* Mint Number & Owned Tag */}
         {isOwned ? (
-          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border ${
+          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border flex items-center gap-1 ${
             isLight
-              ? 'bg-slate-100 text-slate-700 border-slate-200'
-              : 'bg-slate-900/80 text-slate-300 border-slate-700'
+              ? 'bg-purple-50 text-purple-800 border-purple-200'
+              : 'bg-purple-950/80 text-amber-300 border-purple-800'
           }`}>
-            {ownedInfo.count}x
+            <span className="text-amber-500 font-black">#{displayCat.mintNumber || 1}</span>
+            {displayCat.toy && displayCat.toy !== 'none' && <span title={displayCat.toy}>🧸</span>}
           </span>
         ) : (
           <span className={`text-[10px] p-1 rounded-full ${
@@ -90,13 +92,13 @@ export const CatCard: React.FC<CatCardProps> = ({
         )}
       </div>
 
-      {/* Cat Illustration */}
+      {/* Cat Illustration with pixelBlur if not owned */}
       <div className="py-1">
         <CatIllustration
-          cat={cat}
+          cat={displayCat}
           size={84}
           isAnimated={false}
-          className={!isOwned ? 'grayscale-[0.6]' : ''}
+          pixelBlur={!isOwned}
         />
       </div>
 
@@ -105,15 +107,15 @@ export const CatCard: React.FC<CatCardProps> = ({
         <h4 className={`text-xs font-bold truncate max-w-full ${
           isLight ? 'text-slate-800' : 'text-white'
         }`}>
-          {cat.name}
+          {isOwned ? displayCat.name : 'Mystery Cat'}
         </h4>
 
         <div className="flex items-center justify-center gap-1 mt-0.5">
           <span
             className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded font-mono"
-            style={{ color: rarityMeta.color }}
+            style={{ color: isOwned ? rarityMeta.color : '#94a3b8' }}
           >
-            {rarityMeta.name}
+            {isOwned ? rarityMeta.name : `${rarityMeta.name} ?`}
           </span>
         </div>
 
@@ -121,7 +123,7 @@ export const CatCard: React.FC<CatCardProps> = ({
         <div className={`text-[10px] font-mono mt-1 ${
           isLight ? 'text-slate-500' : 'text-slate-400'
         }`}>
-          ★ {cat.collectorValue}
+          {isOwned ? `★ ${displayCat.collectorValue}` : '★ ???'}
         </div>
       </div>
 

@@ -10,6 +10,7 @@ interface HeaderProps {
   collectorValue: number;
   theme: Theme;
   onToggleTheme: () => void;
+  onOpenTelegramBotModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   collectorValue,
   theme,
   onToggleTheme,
+  onOpenTelegramBotModal,
 }) => {
   const [muted, setMuted] = useState(soundManager.getIsMuted());
   const [showKeysDropdown, setShowKeysDropdown] = useState(false);
@@ -41,23 +43,59 @@ export const Header: React.FC<HeaderProps> = ({
         ? 'bg-white/95 border-slate-200 text-slate-800 shadow-xs'
         : 'bg-slate-900/90 border-slate-800 text-white shadow-sm'
     }`}>
+      {/* Telegram Mini App Top Status Bar */}
+      <div className="max-w-md mx-auto flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-700/20 text-[10px]">
+        <button
+          onClick={() => {
+            soundManager.playClick();
+            triggerHaptic('light');
+            onOpenTelegramBotModal?.();
+          }}
+          className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300 font-bold transition-colors"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-mono">Telegram Mini App</span>
+          <span className="text-[9px] bg-sky-500/20 text-sky-400 px-1.5 py-0.2 rounded-full border border-sky-500/30">
+            ✓ Bot
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            soundManager.playClick();
+            triggerHaptic('light');
+            onOpenTelegramBotModal?.();
+          }}
+          className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25 hover:bg-emerald-500/20 transition-all font-mono"
+        >
+          <span>⚡ TG Cloud Sync</span>
+        </button>
+      </div>
+
       <div className="max-w-md mx-auto flex items-center justify-between gap-2">
         {/* Left: Player Mini Badge */}
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center font-black text-xs text-white shadow-inner shrink-0">
-            🐱
+        <button
+          onClick={() => {
+            soundManager.playClick();
+            triggerHaptic('light');
+            onOpenTelegramBotModal?.();
+          }}
+          className="flex items-center gap-2 min-w-0 text-left hover:opacity-90 transition-opacity"
+        >
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-400 to-purple-600 flex items-center justify-center font-black text-xs text-white shadow-inner shrink-0">
+            {player.telegramUsername ? player.telegramUsername.charAt(0).toUpperCase() : '🐱'}
           </div>
           <div className="min-w-0">
             <div className={`text-xs font-bold truncate flex items-center gap-1 ${
               isLight ? 'text-slate-900' : 'text-slate-100'
             }`}>
-              <span>{player.playerName}</span>
+              <span>{player.telegramUsername ? `@${player.telegramUsername}` : player.playerName}</span>
             </div>
             <div className="text-[10px] text-purple-400 flex items-center gap-1 font-mono">
               <span>★ {collectorValue} Pts</span>
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Right: Coins, Keys & Controls (NO Star Shards!) */}
         <div className="flex items-center gap-1.5 shrink-0">

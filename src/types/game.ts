@@ -2,6 +2,12 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'my
 
 export type Theme = 'dark' | 'light';
 
+export type EarType = 'basic' | 'small' | 'crooked' | 'pointed' | 'rounded' | 'tufted-lynx' | 'folded-scottish' | 'fluffy-plush';
+export type EyeType = 'round' | 'anime-sparkle' | 'mystic-gem' | 'sleepy-chic' | 'glossy-boba';
+export type CatToy = 'none' | 'yarn-ball' | 'rubber-duck' | 'fish-bone' | 'mouse-toy' | 'catnip-bell' | 'golden-trophy';
+export type CatBackground = 'none' | 'cosmic-nebula' | 'sunset-aurora' | 'golden-throne' | 'sakura-drift' | 'cyber-matrix' | 'crystal-cavern';
+export type RenderStyle = '2d-flat' | '2d-harmonious' | '2d-expressive' | '3d-volumetric' | 'fluffy-legendary' | 'mythic-divine';
+
 export interface CatSkin {
   id: string;
   name: string;
@@ -15,6 +21,18 @@ export interface CatSkin {
   category: 'Standard' | 'Nature' | 'Magic' | 'Cosmic' | 'Elemental' | 'Careers' | 'Cyber' | 'Royal';
   visualEffect: 'none' | 'subtle-dust' | 'bubble-aura' | 'neon-glow' | 'celestial-orbit' | 'rainbow-sparkles' | 'golden-crown' | 'crystal-flare' | 'fire-ember' | 'ice-frost';
   
+  // Unique Procedural & Trading Attributes
+  mintNumber?: number;
+  dna?: string;
+  generation?: number;
+  personality?: string;
+  earType?: EarType;
+  eyeType?: EyeType;
+  renderStyle?: RenderStyle;
+  toy?: CatToy;
+  backgroundType?: CatBackground;
+  isProcedural?: boolean;
+
   // Visual traits for procedural SVG rendering
   furColor: string;
   furColorSecondary?: string;
@@ -26,6 +44,16 @@ export interface CatSkin {
   patternColor?: string;
   accessory?: 'none' | 'crown' | 'wizard-hat' | 'astronaut-helmet' | 'pirate-hat' | 'ninja-headband' | 'knight-helm' | 'glasses' | 'bow' | 'halo' | 'headphones' | 'cape';
   specialTrait?: string;
+}
+
+export interface TradeListing {
+  id: string;
+  sellerName: string;
+  sellerTelegram?: string;
+  cat: CatSkin;
+  priceCoins: number;
+  wantsRarity?: Rarity;
+  createdAt: number;
 }
 
 export type KeyType = 'wooden' | 'blue' | 'epic' | 'legendary';
@@ -121,6 +149,7 @@ export interface PlayerData {
     count: number;
     unlockedAt: string;
     isFavorite: boolean;
+    customSkin?: CatSkin;
   }>;
   roomBackground: 'cozy_living' | 'sakura_garden' | 'cosmic_dream' | 'royal_castle' | 'beach_sunset';
   stats: PlayerStats;

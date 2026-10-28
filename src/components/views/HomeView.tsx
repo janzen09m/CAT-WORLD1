@@ -8,7 +8,7 @@ import { TabType } from '../BottomNav';
 
 interface HomeViewProps {
   player: PlayerData;
-  activeCat: CatSkin;
+  activeCat?: CatSkin | null;
   collectorValue: number;
   onPetCat: () => Promise<void>;
   onChangeBackground: (bg: PlayerData['roomBackground']) => Promise<void>;
@@ -52,6 +52,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         onPetCat={onPetCat}
         onChangeBackground={onChangeBackground}
         collectorValue={collectorValue}
+        onOpenChests={() => onNavigateTab('chests')}
         theme={theme}
       />
 

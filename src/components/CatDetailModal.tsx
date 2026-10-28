@@ -1,10 +1,11 @@
 import React from 'react';
 import { CatSkin, PlayerData, Theme } from '../types/game';
 import { CatIllustration } from './CatIllustration';
-import { RARITY_CONFIG, getDuplicateCoinBonus } from '../data/catsData';
+import { RARITY_CONFIG } from '../data/catsData';
+import { TOY_TRAIT_CONFIG, BACKGROUND_TRAIT_CONFIG, getRarityStarLevel } from '../utils/catGenerator';
 import { soundManager } from '../utils/audio';
 import { triggerHaptic } from '../utils/telegram';
-import { X, Star, Check, Sparkles, Coins, ShoppingBag } from 'lucide-react';
+import { X, Star, Check } from 'lucide-react';
 
 interface CatDetailModalProps {
   cat: CatSkin;
@@ -22,7 +23,6 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   onClose,
   onEquip,
   onToggleFavorite,
-  onGoToShop,
   theme = 'dark',
 }) => {
   const ownedInfo = player.ownedCats[cat.id];
@@ -32,6 +32,16 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
 
   const rarityMeta = RARITY_CONFIG[cat.rarity];
   const isLight = theme === 'light';
+  const starCount = getRarityStarLevel(cat.rarity);
+
+  const toyKey = cat.toy || 'none';
+  const toyInfo = TOY_TRAIT_CONFIG[toyKey] || TOY_TRAIT_CONFIG.none;
+
+  const bgKey = cat.backgroundType || 'none';
+  const bgInfo = BACKGROUND_TRAIT_CONFIG[bgKey] || BACKGROUND_TRAIT_CONFIG.none;
+
+  const cleanCatName = (cat.name || 'Katze').replace(/\s*#\d+/, '').trim();
+  const mintNumber = cat.mintNumber || 1;
 
   const handleEquip = async () => {
     soundManager.playClick();
@@ -41,17 +51,18 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-      <div className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 border ${
+      <div className={`w-full max-w-sm rounded-3xl p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 border ${
         isLight
           ? 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-800'
           : 'bg-gradient-to-b from-slate-900 to-slate-950 border-slate-700/80 text-white'
       }`}>
+        {/* Close Button */}
         <button
           onClick={() => {
             soundManager.playClick();
             onClose();
           }}
-          className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors ${
+          className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors z-10 ${
             isLight
               ? 'bg-slate-100 text-slate-400 hover:text-slate-700'
               : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -68,12 +79,12 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               triggerHaptic('light');
               await onToggleFavorite(cat.id);
             }}
-            className={`absolute top-4 left-4 p-1.5 rounded-full transition-colors ${
+            className={`absolute top-4 left-4 p-1.5 rounded-full transition-colors z-10 ${
               isLight
                 ? 'bg-slate-100 text-slate-400 hover:text-amber-500'
                 : 'bg-slate-800 text-slate-400 hover:text-amber-400'
             }`}
-            title="Favorite"
+            title="Favorit"
           >
             <Star
               className={`w-4 h-4 ${
@@ -83,110 +94,141 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
           </button>
         )}
 
-        {/* Cat Visual Hero */}
-        <div className="text-center pt-2">
-          <div className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider mb-2"
-               style={{ backgroundColor: `${rarityMeta.color}25`, border: `1.5px solid ${rarityMeta.color}`, color: rarityMeta.color }}>
-            <Sparkles className="w-3 h-3" />
-            <span>{rarityMeta.name}</span>
-            <span>{'★'.repeat(rarityMeta.starCount)}</span>
+        {/* 1. NIVEAU: 1 BIS 5 STERNE */}
+        <div className="text-center pt-1 mb-2">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            {Array.from({ length: 5 }).map((_, idx) => {
+              const isFilled = idx < starCount;
+              return (
+                <span
+                  key={idx}
+                  className={`text-lg transition-transform ${
+                    isFilled ? 'text-amber-400 scale-110 drop-shadow-sm' : isLight ? 'text-slate-200' : 'text-slate-700'
+                  }`}
+                >
+                  ★
+                </span>
+              );
+            })}
           </div>
-
-          <div className="flex justify-center -my-1">
-            <CatIllustration cat={cat} size={150} />
-          </div>
-
-          <h3 className={`text-xl font-black mt-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>{cat.name}</h3>
-          <p className={`text-xs italic px-2 mt-1 ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
-            "{cat.description}"
-          </p>
+          <span
+            className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider font-mono"
+            style={{
+              backgroundColor: `${rarityMeta.color}20`,
+              color: rarityMeta.color,
+              border: `1px solid ${rarityMeta.color}40`,
+            }}
+          >
+            Niveau {starCount} • {rarityMeta.name}
+          </span>
         </div>
 
-        {/* Specs Table */}
-        <div className="grid grid-cols-2 gap-2 my-4 text-xs">
-          <div className={`p-2 rounded-xl border ${
-            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
-          }`}>
-            <span className="text-[10px] text-slate-400 block">Category</span>
-            <span className="font-bold text-purple-400">{cat.category}</span>
-          </div>
+        {/* 2. KATZEN STICKER */}
+        <div className="flex justify-center my-1 relative">
+          <CatIllustration cat={cat} size={150} />
+        </div>
 
-          <div className={`p-2 rounded-xl border ${
-            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
-          }`}>
-            <span className="text-[10px] text-slate-400 block">Collector Value</span>
-            <span className="font-bold text-amber-400 font-mono">★ {cat.collectorValue}</span>
-          </div>
-
-          <div className={`p-2 rounded-xl border ${
-            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
-          }`}>
-            <span className="text-[10px] text-slate-400 block">Price</span>
-            <span className="font-bold text-slate-400 font-mono">{cat.price.toLocaleString('en-US')} Coins</span>
-          </div>
-
-          <div className={`p-2 rounded-xl border ${
-            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
-          }`}>
-            <span className="text-[10px] text-slate-400 block">Duplicate Value</span>
-            <span className="font-bold text-amber-500 font-mono">+{getDuplicateCoinBonus(cat)} Coins</span>
+        {/* 3. IN EINER ZEILE: KATZEN NUMMER DANEBEN DER NAME */}
+        <div className="text-center my-3">
+          <div className="inline-flex items-center justify-center gap-2 max-w-full px-2">
+            <span className="shrink-0 text-sm font-black font-mono px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+              #{mintNumber}
+            </span>
+            <h3 className={`text-lg font-black truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              {cleanCatName}
+            </h3>
           </div>
         </div>
 
-        {/* Ownership Status & CTA */}
-        {isOwned ? (
-          <div className="space-y-2">
-            <div className={`text-center text-xs font-bold py-1.5 rounded-xl border ${
-              isLight
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400'
-            }`}>
-              Owned: {ownedInfo.count} cop{ownedInfo.count > 1 ? 'ies' : 'y'}
+        {/* 4. DETAILS: KATEGORIE, PREIS, SPIELZEUG & HINTERGRUND */}
+        <div className="grid grid-cols-2 gap-2 my-3 text-xs">
+          {/* Kategorie */}
+          <div className={`p-2.5 rounded-2xl border ${
+            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
+          }`}>
+            <span className={`text-[10px] block font-medium ${isLight ? 'text-slate-400' : 'text-slate-400'}`}>
+              Kategorie
+            </span>
+            <span className="font-black text-purple-400 text-xs">
+              {cat.category || 'Standard'}
+            </span>
+          </div>
+
+          {/* Preis */}
+          <div className={`p-2.5 rounded-2xl border ${
+            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
+          }`}>
+            <span className={`text-[10px] block font-medium ${isLight ? 'text-slate-400' : 'text-slate-400'}`}>
+              Wert / Preis
+            </span>
+            <span className="font-black text-amber-500 font-mono text-xs">
+              {cat.price.toLocaleString('de-DE')} 🪙
+            </span>
+          </div>
+
+          {/* Spielzeug */}
+          <div className={`p-2.5 rounded-2xl border ${
+            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
+          }`}>
+            <span className={`text-[10px] block font-medium ${isLight ? 'text-slate-400' : 'text-slate-400'}`}>
+              Spielzeug
+            </span>
+            <div className="flex items-center gap-1 font-bold text-xs truncate mt-0.5">
+              <span>{toyInfo.emoji}</span>
+              <span className={toyInfo.priceBonus > 0 ? 'text-emerald-400' : isLight ? 'text-slate-500' : 'text-slate-400'}>
+                {toyInfo.label}
+              </span>
             </div>
-
-            {isActive ? (
-              <button
-                disabled
-                className={`w-full py-3 font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-default ${
-                  isLight ? 'bg-slate-100 text-slate-400' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                <Check className="w-4 h-4 text-pink-400" />
-                <span>Currently Active Cat</span>
-              </button>
-            ) : (
-              <button
-                onClick={handleEquip}
-                className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-black rounded-xl text-white shadow-lg shadow-pink-500/25 flex items-center justify-center gap-1.5 transition-all active:scale-95"
-              >
-                <Check className="w-4 h-4" />
-                <span>Equip as Active Cat</span>
-              </button>
+            {toyInfo.priceBonus > 0 && (
+              <span className="text-[9px] font-mono text-emerald-500 block">
+                +{toyInfo.priceBonus} 🪙 Bonus
+              </span>
             )}
           </div>
-        ) : (
-          <div className="space-y-2">
-            <div className={`text-center text-xs py-1.5 rounded-xl ${
-              isLight ? 'bg-slate-100 text-slate-500' : 'bg-slate-800/50 text-slate-400'
-            }`}>
-              Not Yet Unlocked
-            </div>
 
-            {onGoToShop ? (
-              <button
-                onClick={() => {
-                  soundManager.playClick();
-                  onClose();
-                  onGoToShop();
-                }}
-                className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 font-black rounded-xl text-white shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all active:scale-95"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                <span>View in Shop ({cat.price.toLocaleString('en-US')} Coins)</span>
-              </button>
-            ) : null}
+          {/* Hintergrund */}
+          <div className={`p-2.5 rounded-2xl border ${
+            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
+          }`}>
+            <span className={`text-[10px] block font-medium ${isLight ? 'text-slate-400' : 'text-slate-400'}`}>
+              Hintergrund
+            </span>
+            <div className="flex items-center gap-1 font-bold text-xs truncate mt-0.5">
+              <span>{bgInfo.emoji}</span>
+              <span className={bgInfo.priceBonus > 0 ? 'text-indigo-400' : isLight ? 'text-slate-500' : 'text-slate-400'}>
+                {bgInfo.label}
+              </span>
+            </div>
+            {bgInfo.priceBonus > 0 && (
+              <span className="text-[9px] font-mono text-indigo-400 block">
+                +{bgInfo.priceBonus} 🪙 Bonus
+              </span>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* 5. BUTTON: EQUIP AS ACTIVE CAT DARUNTER */}
+        <div className="pt-1">
+          {isActive ? (
+            <button
+              disabled
+              className={`w-full py-3 font-black rounded-xl flex items-center justify-center gap-1.5 cursor-default text-xs ${
+                isLight ? 'bg-slate-100 text-slate-400' : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              <Check className="w-4 h-4 text-pink-400" />
+              <span>Aktuell ausgerüstet</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleEquip}
+              className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-black rounded-xl text-white shadow-lg shadow-pink-500/25 flex items-center justify-center gap-1.5 transition-all active:scale-95 text-xs"
+            >
+              <Check className="w-4 h-4" />
+              <span>Als aktive Katze ausrüsten</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

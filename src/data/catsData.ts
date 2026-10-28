@@ -1126,7 +1126,8 @@ export const CAT_SKINS: CatSkin[] = [
   },
 ];
 
-export const GET_CAT_BY_ID = (id: string): CatSkin => {
+export const GET_CAT_BY_ID = (id: string, customSkin?: CatSkin): CatSkin => {
+  if (customSkin && (customSkin.id === id || customSkin.isProcedural)) return customSkin;
   return CAT_SKINS.find(c => c.id === id) || CAT_SKINS[0];
 };
 

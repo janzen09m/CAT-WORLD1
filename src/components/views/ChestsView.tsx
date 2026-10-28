@@ -206,6 +206,7 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
           player={player}
           onClose={() => setSelectedChest(null)}
           onOpenConfirm={onOpenChest}
+          onOpenExchangeModal={onOpenExchangeModal}
           theme={theme}
         />
       )}

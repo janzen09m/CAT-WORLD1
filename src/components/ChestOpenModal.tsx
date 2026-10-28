@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { ChestConfig, CatSkin, PlayerData, Theme } from '../types/game';
 import { CatIllustration } from './CatIllustration';
 import { RARITY_CONFIG } from '../data/catsData';
+import { KEY_EXCHANGE_RATES } from '../data/chestsData';
 import { soundManager } from '../utils/audio';
 import { triggerHaptic } from '../utils/telegram';
 import { Sparkles, X, Key, Coins, Check } from 'lucide-react';
@@ -12,6 +13,7 @@ interface ChestOpenModalProps {
   player: PlayerData;
   onClose: () => void;
   onOpenConfirm: (chestId: ChestConfig['id'], useCoins: boolean) => Promise<{ droppedCat: CatSkin; isDuplicate: boolean; coinsAwarded?: number; shardsAwarded?: number }>;
+  onOpenExchangeModal?: () => void;
   theme?: Theme;
 }
 
@@ -20,6 +22,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
   player,
   onClose,
   onOpenConfirm,
+  onOpenExchangeModal,
   theme = 'light',
 }) => {
   const [openingState, setOpeningState] = useState<'idle' | 'opening' | 'revealed'>('idle');
@@ -186,35 +189,38 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
               </p>
             )}
 
-            {/* Action Buttons: With Key or Coins */}
+            {/* Action Buttons: Strictly with Key */}
             <div className="space-y-2 pt-1">
               {hasKey ? (
                 <button
                   onClick={() => handleStartOpen(false)}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-black rounded-xl text-white shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all active:scale-95"
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 font-black rounded-xl text-white shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all active:scale-95 text-xs"
                 >
                   <Key className="w-4 h-4 text-blue-200" />
-                  <span>Open with Key ({player.keys[chest.keyRequired]} remaining)</span>
+                  <span>Kiste öffnen mit 1x {KEY_EXCHANGE_RATES[chest.keyRequired]?.name || 'Schlüssel'} ({player.keys[chest.keyRequired]}x da)</span>
                 </button>
               ) : (
-                <button
-                  onClick={() => handleStartOpen(true)}
-                  disabled={!hasCoins}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 font-black rounded-xl text-white shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <Coins className="w-4 h-4 text-amber-200" />
-                  <span>Open for {chest.coinPrice} Coins</span>
-                </button>
-              )}
+                <div className="space-y-2">
+                  <div className={`p-2.5 rounded-xl border text-xs text-center font-bold ${
+                    isLight ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-950/30 border-amber-800/40 text-amber-300'
+                  }`}>
+                    🔒 Kisten können nur mit Schlüsseln geöffnet werden!
+                  </div>
 
-              {/* Alternative option */}
-              {hasKey && hasCoins && (
-                <button
-                  onClick={() => handleStartOpen(true)}
-                  className="text-xs text-slate-400 hover:text-slate-600 underline block mx-auto"
-                >
-                  Or open for {chest.coinPrice} Coins
-                </button>
+                  {onOpenExchangeModal && (
+                    <button
+                      onClick={() => {
+                        soundManager.playClick();
+                        onClose();
+                        onOpenExchangeModal();
+                      }}
+                      className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 font-black rounded-xl text-white shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all active:scale-95 text-xs"
+                    >
+                      <Key className="w-4 h-4 text-amber-200" />
+                      <span>{KEY_EXCHANGE_RATES[chest.keyRequired]?.name} für {KEY_EXCHANGE_RATES[chest.keyRequired]?.coinPrice} 🪙 holen</span>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -243,11 +249,25 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
         {/* --- STATE 3: REVEAL SCREEN --- */}
         {openingState === 'revealed' && reward && rarityMeta && (
           <div className="space-y-4 text-center animate-in fade-in zoom-in duration-300">
-            {/* Rarity Flare */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-md"
-                 style={{ backgroundColor: `${rarityMeta.color}25`, border: `1.5px solid ${rarityMeta.color}` }}>
-              <Sparkles className="w-3.5 h-3.5" style={{ color: rarityMeta.color }} />
-              <span style={{ color: rarityMeta.color }}>{rarityMeta.name}</span>
+            {/* Rarity & Mint Serial Banner */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-md"
+                   style={{ backgroundColor: `${rarityMeta.color}25`, border: `1.5px solid ${rarityMeta.color}` }}>
+                <Sparkles className="w-3.5 h-3.5" style={{ color: rarityMeta.color }} />
+                <span style={{ color: rarityMeta.color }}>{rarityMeta.name}</span>
+              </div>
+
+              {reward.cat.mintNumber && (
+                <span className="text-[11px] font-mono font-black px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  Global #{reward.cat.mintNumber}
+                </span>
+              )}
+
+              {reward.cat.dna && (
+                <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                  DNA: {reward.cat.dna}
+                </span>
+              )}
             </div>
 
             {/* Dropped Cat Presentation */}
@@ -262,20 +282,40 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
               </p>
             </div>
 
-            {/* Duplicate Notice or New Skin Tag */}
-            {reward.isDuplicate ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-2.5 text-xs text-amber-800">
-                <span className="font-bold block">Duplicate Cat Drawn!</span>
-                <span className="text-[11px] font-mono font-bold">
-                  +{reward.coinsAwarded || 100} Bonus Coins awarded! 🪙
+            {/* Unique Procedural Trait Badges */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-bold font-mono">
+              {reward.cat.renderStyle === '3d-volumetric' && (
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                  🔮 3D Volumetric Sculpt
                 </span>
-              </div>
-            ) : (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5 text-xs text-emerald-700 flex items-center justify-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-500" />
-                <span className="font-bold">Unlocked in your collection!</span>
-              </div>
-            )}
+              )}
+              {reward.cat.renderStyle === 'fluffy-legendary' && (
+                <span className="px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 border border-pink-500/30">
+                  ✨ Fluffy Fur Texture
+                </span>
+              )}
+              {reward.cat.backgroundType && reward.cat.backgroundType !== 'none' && (
+                <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                  🌌 {reward.cat.backgroundType.replace('-', ' ')}
+                </span>
+              )}
+              {reward.cat.toy && reward.cat.toy !== 'none' && (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  🧸 Toy: {reward.cat.toy.replace('-', ' ')}
+                </span>
+              )}
+              {reward.cat.personality && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  💖 {reward.cat.personality}
+                </span>
+              )}
+            </div>
+
+            {/* Success Unlocked Notice */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5 text-xs text-emerald-700 flex items-center justify-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-500" />
+              <span className="font-bold">100% Unique Cat Added to Your Collection!</span>
+            </div>
 
             {/* Stats Tag */}
             <div className={`flex justify-center gap-6 text-xs font-mono border-t pt-3 ${isLight ? 'border-slate-100 text-slate-600' : 'border-slate-800 text-slate-300'}`}>

@@ -8,10 +8,11 @@ import { Heart, Sparkles, Image, Trophy } from 'lucide-react';
 
 interface PetCatRoomProps {
   player: PlayerData;
-  activeCat: CatSkin;
+  activeCat?: CatSkin | null;
   onPetCat: () => Promise<void>;
   onChangeBackground: (bg: PlayerData['roomBackground']) => Promise<void>;
   collectorValue: number;
+  onOpenChests?: () => void;
   theme?: Theme;
 }
 
@@ -27,14 +28,45 @@ export const PetCatRoom: React.FC<PetCatRoomProps> = ({
   onPetCat,
   onChangeBackground,
   collectorValue,
+  onOpenChests,
   theme = 'dark',
 }) => {
   const [hearts, setHearts] = useState<FloatingHeart[]>([]);
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [isPurring, setIsPurring] = useState(false);
 
-  const rarityMeta = RARITY_CONFIG[activeCat.rarity];
   const isLight = theme === 'light';
+
+  if (!activeCat) {
+    return (
+      <div className={`rounded-3xl p-6 shadow-xl border text-center transition-colors ${
+        isLight
+          ? 'bg-gradient-to-r from-purple-50 via-pink-50 to-amber-50 border-purple-200 text-slate-800'
+          : 'bg-gradient-to-r from-slate-900 to-purple-950/70 border-purple-500/30 text-white'
+      }`}>
+        <div className="text-5xl mb-2 animate-bounce">📦</div>
+        <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+          Willkommen in CAT WORLD!
+        </h2>
+        <p className={`text-xs mt-1 mb-4 ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+          Öffne deine erste Kiste mit deinen Schlüsseln, um die erste Katze weltweit zu ziehen!
+        </p>
+        {onOpenChests && (
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              onOpenChests();
+            }}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white font-black text-xs shadow-lg shadow-pink-500/25 active:scale-95 transition-all inline-flex items-center gap-2"
+          >
+            <span>📦 Erste Kiste öffnen ({player.keys.wooden || 0} Holz-Schlüssel)</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const rarityMeta = RARITY_CONFIG[activeCat.rarity];
 
   const handlePet = async (e: React.MouseEvent) => {
     soundManager.playPurr();
