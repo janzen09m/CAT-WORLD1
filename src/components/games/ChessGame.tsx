@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Chess, Square, PieceSymbol, Color } from 'chess.js';
+import React, { useState } from 'react';
+import { Chess, Square } from 'chess.js';
 import { soundManager } from '../../utils/audio';
 import { triggerHaptic } from '../../utils/telegram';
-import { ArrowLeft, RefreshCw, Trophy, Flag } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Flag } from 'lucide-react';
 import { Theme } from '../../types/game';
 
 interface ChessGameProps {
@@ -29,12 +29,12 @@ const PIECE_SYMBOLS: Record<string, string> = {
 export const ChessGame: React.FC<ChessGameProps> = ({
   onBack,
   onGameComplete,
-  theme = 'dark',
+  theme = 'light',
 }) => {
   const [game, setGame] = useState<Chess>(() => new Chess());
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [legalMoves, setLegalMoves] = useState<Square[]>([]);
-  const [gameStatus, setGameStatus] = useState<string>('Your Turn (White)');
+  const [gameStatus, setGameStatus] = useState<string>('Du bist am Zug (Weiß)');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [rewardMsg, setRewardMsg] = useState<string | null>(null);
@@ -55,7 +55,6 @@ export const ChessGame: React.FC<ChessGameProps> = ({
       let chosenMove = moves[Math.floor(Math.random() * moves.length)];
 
       if (captureMoves.length > 0) {
-        // High priority capture (e.g. Queen > Rook > Bishop/Knight > Pawn)
         const pieceValues: Record<string, number> = { q: 9, r: 5, b: 3, n: 3, p: 1 };
         captureMoves.sort((a, b) => {
           const valA = a.captured ? pieceValues[a.captured] || 1 : 0;
@@ -77,8 +76,8 @@ export const ChessGame: React.FC<ChessGameProps> = ({
   const checkGameOutcome = async (currentChess: Chess) => {
     if (currentChess.isCheckmate()) {
       setIsGameOver(true);
-      const isPlayerWinner = currentChess.turn() === 'b'; // If it's black's turn and checkmate, white (player) won!
-      setGameStatus(isPlayerWinner ? 'Checkmate! You Won! 🏆' : 'Checkmate! Cat AI Won! 😿');
+      const isPlayerWinner = currentChess.turn() === 'b';
+      setGameStatus(isPlayerWinner ? 'Schachmatt! Du hast gewonnen! 🏆' : 'Schachmatt! Katzen-KI hat gewonnen! 😿');
 
       const outcome = isPlayerWinner ? 'win' : 'loss';
       if (isPlayerWinner) {
@@ -91,74 +90,71 @@ export const ChessGame: React.FC<ChessGameProps> = ({
 
       try {
         const res = await onGameComplete(outcome);
-        setRewardMsg(
-          isPlayerWinner
-            ? `Chess Victory! Earned +${res.coinsEarned} Coins! ♟️`
-            : `Defeat. +${res.coinsEarned} Consolation Coins ♟️`
-        );
+        if (res?.coinsEarned) {
+          setRewardMsg(`+${res.coinsEarned} Münzen verdient! 🪙`);
+        }
       } catch {
         // ignore
       }
-    } else if (currentChess.isDraw() || currentChess.isStalemate()) {
+    } else if (currentChess.isDraw()) {
       setIsGameOver(true);
-      setGameStatus('Draw / Stalemate! 🤝');
+      setGameStatus('Remis! Unentschieden! 🤝');
       soundManager.playCoin();
 
       try {
         const res = await onGameComplete('draw');
-        setRewardMsg(`Draw! +${res.coinsEarned} Coins ♟️`);
+        if (res?.coinsEarned) {
+          setRewardMsg(`+${res.coinsEarned} Münzen verdient! 🪙`);
+        }
       } catch {
         // ignore
       }
-    } else if (currentChess.isCheck()) {
-      setGameStatus(currentChess.turn() === 'w' ? 'Check! You are in check!' : 'Check on Black King!');
+    } else if (currentChess.inCheck()) {
+      setGameStatus('Schach! ⚠️');
+      soundManager.playPop();
     } else {
-      setGameStatus(currentChess.turn() === 'w' ? 'Your Turn (White)' : 'Grandmaster Meow thinking...');
+      setGameStatus(currentChess.turn() === 'w' ? 'Du bist am Zug (Weiß)' : 'Katzen-KI überlegt...');
     }
   };
 
   const handleSquareClick = (square: Square) => {
     if (isGameOver || isAiThinking || game.turn() !== 'w') return;
 
-    // If already selected, try to move or deselect
     if (selectedSquare) {
-      if (selectedSquare === square) {
+      if (square === selectedSquare) {
         setSelectedSquare(null);
         setLegalMoves([]);
         return;
       }
 
-      // Check if move is legal
       try {
         const move = game.move({
           from: selectedSquare,
           to: square,
-          promotion: 'q', // auto promote to queen for simplicity
+          promotion: 'q',
         });
 
         if (move) {
-          soundManager.playClick();
+          soundManager.playTennisHit();
           triggerHaptic('light');
           setSelectedSquare(null);
           setLegalMoves([]);
+          const nextGame = new Chess(game.fen());
+          setGame(nextGame);
 
-          const newChess = new Chess(game.fen());
-          setGame(newChess);
+          checkGameOutcome(nextGame);
 
-          if (!newChess.isGameOver()) {
-            checkGameOutcome(newChess);
-            makeAiMove(newChess);
-          } else {
-            checkGameOutcome(newChess);
+          if (!nextGame.isGameOver()) {
+            setGameStatus('Katzen-KI überlegt (Schwarz)...');
+            makeAiMove(nextGame);
           }
           return;
         }
       } catch {
-        // Illegal move, see if clicking another own piece instead
+        // invalid move
       }
     }
 
-    // Select piece
     const piece = game.get(square);
     if (piece && piece.color === 'w') {
       soundManager.playClick();
@@ -173,129 +169,102 @@ export const ChessGame: React.FC<ChessGameProps> = ({
 
   const handleSurrender = async () => {
     if (isGameOver) return;
-    soundManager.playClick();
     setIsGameOver(true);
-    setGameStatus('Resigned. Game Over.');
-    try {
-      const res = await onGameComplete('loss');
-      setRewardMsg(`Resigned. +${res.coinsEarned} Consolation Coins`);
-    } catch {
-      // ignore
-    }
+    setGameStatus('Aufgegeben. Katzen-KI gewinnt!');
+    soundManager.playError();
+    await onGameComplete('loss');
   };
 
   const resetGame = () => {
     soundManager.playClick();
-    const fresh = new Chess();
-    setGame(fresh);
+    const newG = new Chess();
+    setGame(newG);
     setSelectedSquare(null);
     setLegalMoves([]);
-    setIsGameOver(false);
+    setGameStatus('Du bist am Zug (Weiß)');
     setIsAiThinking(false);
-    setGameStatus('Your Turn (White)');
+    setIsGameOver(false);
     setRewardMsg(null);
   };
 
-  const board = game.board();
+  const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
 
   return (
     <div className="space-y-4 max-w-sm mx-auto select-none">
-      {/* Top Header */}
+      {/* Header bar */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => {
-            soundManager.playClick();
-            onBack();
-          }}
-          className={`p-2 rounded-xl flex items-center gap-1 text-xs font-bold border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          onClick={onBack}
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
         </button>
 
-        <h3 className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>Chess vs Meow</h3>
+        <h3 className={`font-black text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>
+          Katzen-Schach ♟️
+        </h3>
 
         <button
           onClick={resetGame}
-          className={`p-2 rounded-xl border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
-          title="Restart"
+          title="Neu starten"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Opponent Info & Turn Status */}
-      <div className={`rounded-2xl p-3 flex items-center justify-between border ${
-        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-800/90 border-slate-700/80'
+      {/* Game Status HUD */}
+      <div className={`p-2.5 rounded-2xl flex items-center justify-between text-xs font-bold border ${
+        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/90 border-slate-800'
       }`}>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-lg text-white">
-            🐱
-          </div>
-          <div>
-            <div className={`text-xs font-bold flex items-center gap-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
-              <span>Grandmaster Meow</span>
-              <span className="text-[10px] text-purple-500 font-mono">(1450 Elo)</span>
-            </div>
-            <div className="text-[10px] text-slate-400">
-              {isAiThinking ? 'Calculating moves...' : 'Black Pieces'}
-            </div>
-          </div>
+          <span className={`w-2.5 h-2.5 rounded-full ${isAiThinking ? 'bg-amber-400 animate-ping' : 'bg-emerald-500'}`} />
+          <span className={isLight ? 'text-slate-700' : 'text-slate-300'}>{gameStatus}</span>
         </div>
 
-        <div className="text-right">
-          <div className={`text-xs font-bold ${isGameOver ? 'text-pink-500' : 'text-emerald-500'}`}>
-            {gameStatus}
-          </div>
+        <div className="text-[10px] text-slate-400 font-mono">
+          Weiß: Du vs Schwarz: KI
         </div>
       </div>
 
       {/* 8x8 Chessboard */}
-      <div className={`p-2 rounded-2xl shadow-2xl border-2 ${
-        isLight ? 'bg-amber-50 border-amber-200' : 'bg-slate-950 border-slate-800'
+      <div className={`rounded-2xl p-2.5 shadow-2xl border ${
+        isLight ? 'bg-amber-900/10 border-amber-800/30' : 'bg-slate-900/95 border-slate-800'
       }`}>
-        <div className="grid grid-cols-8 rounded-lg overflow-hidden border border-amber-700/40">
-          {board.map((row, rowIdx) =>
-            row.map((piece, colIdx) => {
-              const file = String.fromCharCode('a'.charCodeAt(0) + colIdx);
-              const rank = 8 - rowIdx;
+        <div className="grid grid-cols-8 gap-0 border-2 border-amber-900/40 rounded-xl overflow-hidden aspect-square">
+          {ranks.map(rank =>
+            files.map((file, colIdx) => {
               const square = `${file}${rank}` as Square;
-
-              const isDark = (rowIdx + colIdx) % 2 === 1;
+              const isDark = (colIdx + rank) % 2 === 1;
+              const piece = game.get(square);
               const isSelected = selectedSquare === square;
-              const isLegalTarget = legalMoves.includes(square);
-
-              let pieceSymbol = '';
-              if (piece) {
-                pieceSymbol = PIECE_SYMBOLS[`${piece.color}${piece.type}`] || '';
-              }
+              const isLegal = legalMoves.includes(square);
+              const pieceKey = piece ? `${piece.color}${piece.type}` : null;
+              const pieceSymbol = pieceKey ? PIECE_SYMBOLS[pieceKey] : null;
 
               return (
                 <button
                   key={square}
                   onClick={() => handleSquareClick(square)}
                   disabled={isGameOver || isAiThinking}
-                  className={`aspect-square relative flex items-center justify-center transition-colors ${
+                  className={`aspect-square flex items-center justify-center relative transition-all ${
                     isSelected
-                      ? 'bg-amber-400/80'
+                      ? 'bg-amber-400 ring-2 ring-amber-500 z-10'
                       : isDark
-                      ? 'bg-amber-800/60'
-                      : 'bg-amber-100/90'
+                      ? 'bg-amber-800 text-amber-100'
+                      : 'bg-amber-100 text-amber-900'
                   }`}
                 >
-                  {/* Legal move indicator dot */}
-                  {isLegalTarget && (
+                  {/* Legal move indicator */}
+                  {isLegal && (
                     <div
                       className={`absolute rounded-full z-10 ${
-                        piece ? 'w-full h-full border-2 border-emerald-400' : 'w-3 h-3 bg-emerald-500 shadow-sm'
+                        piece ? 'w-full h-full border-4 border-emerald-400/80 bg-emerald-500/20' : 'w-3 h-3 bg-emerald-500/80'
                       }`}
                     />
                   )}
@@ -336,18 +305,18 @@ export const ChessGame: React.FC<ChessGameProps> = ({
             onClick={resetGame}
             className="w-full py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-bold text-xs rounded-xl text-white shadow-lg transition-all"
           >
-            Start New Chess Match
+            Neue Schachpartie starten
           </button>
         </div>
       ) : (
         <div className="flex justify-between items-center text-xs px-1">
-          <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Tap a piece to view moves</span>
+          <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Figur antippen für Züge</span>
           <button
             onClick={handleSurrender}
             className="text-rose-500 hover:text-rose-600 flex items-center gap-1 font-bold underline"
           >
             <Flag className="w-3.5 h-3.5" />
-            <span>Resign</span>
+            <span>Aufgeben</span>
           </button>
         </div>
       )}

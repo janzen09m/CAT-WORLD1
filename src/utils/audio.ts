@@ -59,6 +59,28 @@ export const soundManager = {
     }
   },
 
+  playPop: () => {
+    if (isMuted) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(850, now + 0.04);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.04);
+    } catch {
+      // silent fallback
+    }
+  },
+
   playCoin: () => {
     if (isMuted) return;
     const ctx = getAudioContext();

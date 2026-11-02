@@ -55,11 +55,62 @@ const MARKET_LISTINGS: TradeListing[] = [
   },
 ];
 
-// Middleware to extract player ID from headers or body
+const SESSION_SECRET = process.env.SESSION_SECRET || 'catworld_secure_session_secret_2026_salt_87a3b4c';
+
+export function createSessionToken(playerId: string): string {
+  const timestamp = Date.now();
+  const payload = `${playerId}.${timestamp}`;
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+  return `${payload}.${signature}`;
+}
+
+export function verifySessionToken(token: string): string | null {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [playerId, timestampStr, signature] = parts;
+  const timestamp = parseInt(timestampStr, 10);
+  if (isNaN(timestamp)) return null;
+
+  // Session valid for 30 days
+  if (Date.now() - timestamp > 30 * 24 * 60 * 60 * 1000) return null;
+
+  const payload = `${playerId}.${timestampStr}`;
+  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+  try {
+    if (signature.length === expectedSignature.length &&
+        crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSignature, 'hex'))) {
+      return playerId;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// Middleware to extract verified player from signed session token or dev header
 function getAuthenticatedPlayer(req: Request): ReturnType<typeof getPlayer> {
-  const playerId = (req.headers['x-player-id'] as string) || req.body?.playerId;
-  if (!playerId) return null;
-  return getPlayer(playerId);
+  const authHeader = req.headers['authorization'];
+  const sessionTokenHeader = req.headers['x-session-token'] as string;
+  let token = sessionTokenHeader;
+  if (!token && authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7).trim();
+  }
+
+  if (token) {
+    const verifiedPlayerId = verifySessionToken(token);
+    if (verifiedPlayerId) {
+      return getPlayer(verifiedPlayerId);
+    }
+  }
+
+  // Safe fallback for local development / test scripts
+  const fallbackId = (req.headers['x-player-id'] as string) || req.body?.playerId;
+  if (fallbackId && process.env.NODE_ENV !== 'production') {
+    return getPlayer(fallbackId);
+  }
+
+  return null;
 }
 
 // Telegram initData verification helper
@@ -102,7 +153,7 @@ function verifyTelegramInitData(initData: string, botToken?: string): { verified
 // POST /api/auth/init
 apiRouter.post('/auth/init', (req: Request, res: Response) => {
   const { initData, devPlayerId } = req.body;
-  const botToken = process.env.BOT_TOKEN;
+  const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 
   let tgUser: any = undefined;
 
@@ -125,9 +176,13 @@ apiRouter.post('/auth/init', (req: Request, res: Response) => {
     username: tgUser.username,
   } : undefined);
 
+  // Generate authentic cryptographic session token
+  const sessionToken = createSessionToken(player.id);
+
   res.json({
     success: true,
     player,
+    sessionToken,
     collectorValue: calculateCollectorValue(player),
   });
 });

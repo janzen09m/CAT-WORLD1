@@ -60,24 +60,52 @@ export default function App() {
     });
   }, []);
 
+  const [sessionToken, setSessionToken] = useState<string>(() => {
+    try {
+      return localStorage.getItem('catworld_session_token') || '';
+    } catch {
+      return '';
+    }
+  });
+
   const createFallbackPlayer = (id: string): PlayerData => {
     try {
       const cached = localStorage.getItem(`catworld_player_cache_${id}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && parsed.id) return parsed;
+        if (parsed && parsed.id && parsed.ownedCats && Object.keys(parsed.ownedCats).length > 0) return parsed;
       }
     } catch {}
+
+    const baseWhiteCat = GET_CAT_BY_ID('cat-01')!;
+    const starterCat: CatSkin = {
+      ...baseWhiteCat,
+      name: 'Schneeflöckchen #1',
+      description: 'Dein treuer Starter-Gefährte vom ersten Tag an.',
+      mintNumber: 1,
+      personality: 'Treuer Starter-Gefährte',
+      toy: 'none',
+      backgroundType: 'none',
+      renderStyle: '2d-flat',
+    };
+
     return {
       id,
-      playerName: 'Cat Lover',
-      catCustomName: 'Snowflake',
-      activeCatId: '',
+      playerName: 'Katzenfreund',
+      catCustomName: 'Schneeflöckchen',
+      activeCatId: 'cat-01',
       createdAt: new Date().toISOString(),
       coins: 500,
       starShards: 0,
       keys: { wooden: 2, blue: 1, epic: 0, legendary: 0 },
-      ownedCats: {},
+      ownedCats: {
+        'cat-01': {
+          count: 1,
+          unlockedAt: new Date().toISOString(),
+          isFavorite: true,
+          customSkin: starterCat,
+        },
+      },
       roomBackground: 'cozy_living',
       stats: {
         gamesPlayed: 0,
@@ -94,7 +122,7 @@ export default function App() {
         petCount: 0,
       },
       dailyTasks: INITIAL_DAILY_TASKS,
-      achievements: INITIAL_ACHIEVEMENTS,
+      achievements: INITIAL_ACHIEVEMENTS.map(ach => ach.id === 'ach-collector-5' ? { ...ach, current: 1 } : ach),
       loginStreak: 1,
       lastLoginDate: new Date().toISOString().split('T')[0],
       dailyLoginClaimedToday: false,
@@ -125,6 +153,12 @@ export default function App() {
       const data = await res.json();
       if (data.success && data.player) {
         let currentPlayer = data.player;
+        if (data.sessionToken) {
+          setSessionToken(data.sessionToken);
+          try {
+            localStorage.setItem('catworld_session_token', data.sessionToken);
+          } catch {}
+        }
 
         // Auto-load & merge achievements from Telegram CloudStorage
         try {
@@ -187,12 +221,17 @@ export default function App() {
   // Authenticated API request helper
   const apiRequest = async (url: string, body: Record<string, any>) => {
     if (!player) throw new Error('Not logged in');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-player-id': player.id,
+    };
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+      headers['x-session-token'] = sessionToken;
+    }
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-player-id': player.id,
-      },
+      headers,
       body: JSON.stringify({ ...body, playerId: player.id }),
     });
     const data = await res.json();
@@ -404,6 +443,7 @@ export default function App() {
             <ChestsView
               player={player}
               onOpenChest={handleOpenChest}
+              onEquipCat={handleEquipCat}
               onOpenExchangeModal={() => setShowConvertModal(true)}
               theme={theme}
             />

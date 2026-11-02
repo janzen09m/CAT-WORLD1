@@ -150,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className={`flex items-center justify-between border-b pb-1.5 mb-2 ${
                   isLight ? 'border-slate-100' : 'border-slate-700/60'
                 }`}>
-                  <span className="text-xs font-bold">Chest Keys</span>
+                  <span className="text-xs font-bold">Kistenschlüssel</span>
                   <button
                     onClick={() => {
                       setShowKeysDropdown(false);
@@ -158,32 +158,32 @@ export const Header: React.FC<HeaderProps> = ({
                     }}
                     className="text-[10px] text-amber-600 hover:text-amber-700 font-bold flex items-center gap-0.5"
                   >
-                    <span>+ Buy Keys</span>
+                    <span>+ Kaufen</span>
                   </button>
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div className={`flex items-center justify-between px-2 py-1 rounded ${
                     isLight ? 'bg-amber-50 text-amber-800' : 'bg-amber-950/30 text-amber-400'
                   }`}>
-                    <span>Wooden Key:</span>
+                    <span>Holzschlüssel:</span>
                     <span className="font-mono font-bold">{player.keys.wooden || 0}</span>
                   </div>
                   <div className={`flex items-center justify-between px-2 py-1 rounded ${
                     isLight ? 'bg-blue-50 text-blue-800' : 'bg-blue-950/30 text-blue-400'
                   }`}>
-                    <span>Blue Key:</span>
+                    <span>Blauer Schlüssel:</span>
                     <span className="font-mono font-bold">{player.keys.blue || 0}</span>
                   </div>
                   <div className={`flex items-center justify-between px-2 py-1 rounded ${
                     isLight ? 'bg-purple-50 text-purple-800' : 'bg-purple-950/30 text-purple-400'
                   }`}>
-                    <span>Epic Key:</span>
+                    <span>Epischer Schlüssel:</span>
                     <span className="font-mono font-bold">{player.keys.epic || 0}</span>
                   </div>
                   <div className={`flex items-center justify-between px-2 py-1 rounded ${
                     isLight ? 'bg-amber-100/60 text-amber-900' : 'bg-amber-900/30 text-amber-300'
                   }`}>
-                    <span>Legendary Key:</span>
+                    <span>Legendärer Schlüssel:</span>
                     <span className="font-mono font-bold">{player.keys.legendary || 0}</span>
                   </div>
                 </div>
@@ -192,10 +192,10 @@ export const Header: React.FC<HeaderProps> = ({
                     setShowKeysDropdown(false);
                     onOpenExchangeModal();
                   }}
-                  className="w-full mt-2.5 py-1.5 text-[11px] font-black bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+                  className="w-full mt-2.5 py-1.5 text-[11px] font-black bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-xs active:scale-98"
                 >
                   <Coins className="w-3 h-3" />
-                  <span>Buy Keys with Coins</span>
+                  <span>Schlüssel mit Münzen kaufen</span>
                 </button>
               </div>
             )}

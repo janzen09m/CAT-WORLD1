@@ -6,7 +6,7 @@ import { ChessGame } from '../games/ChessGame';
 import { MemoryGame } from '../games/MemoryGame';
 import { CatCatchGame } from '../games/CatCatchGame';
 import { soundManager } from '../../utils/audio';
-import { Gamepad2, Trophy, Coins, Play, ArrowRight } from 'lucide-react';
+import { Gamepad2, Play } from 'lucide-react';
 
 interface GamesViewProps {
   player: PlayerData;
@@ -19,7 +19,7 @@ type ActiveGame = 'hub' | 'tictactoe' | 'tennis' | 'chess' | 'memory' | 'catcatc
 export const GamesView: React.FC<GamesViewProps> = ({
   player,
   onCompleteGame,
-  theme = 'dark',
+  theme = 'light',
 }) => {
   const [activeGame, setActiveGame] = useState<ActiveGame>('hub');
   const isLight = theme === 'light';
@@ -96,48 +96,48 @@ export const GamesView: React.FC<GamesViewProps> = ({
   }[] = [
     {
       id: 'tennis',
-      title: 'Cat Tennis',
-      subtitle: '2D Arcade tennis with paddle deflection & ball physics',
+      title: 'Katzen-Tennis',
+      subtitle: '2D Arcade-Tennis mit Schläger-Physik und schnellen Ballwechseln',
       icon: '🎾',
       color: 'from-emerald-600 to-teal-800',
-      badge: 'Up to 35 🪙',
-      stat: `${player.stats.tennisWins || 0} Wins`,
+      badge: 'Bis zu 40 🪙',
+      stat: `${player.stats.tennisWins || 0} Siege`,
     },
     {
       id: 'chess',
-      title: 'Chess vs Meow',
-      subtitle: 'Classic chess board vs Grandmaster Meow AI',
+      title: 'Schach gegen Miau',
+      subtitle: 'Klassisches Schachbrett gegen die clevere Katzen-KI',
       icon: '♟️',
       color: 'from-amber-700 to-amber-950',
       badge: '50 🪙 + 5 ✨',
-      stat: `${player.stats.chessWins || 0} Wins`,
+      stat: `${player.stats.chessWins || 0} Siege`,
     },
     {
       id: 'tictactoe',
-      title: 'Tic-Tac-Toe',
-      subtitle: '3 in a row against adaptive feline AI levels',
+      title: 'Tic-Tac-Toe Pfoten',
+      subtitle: 'Drei in einer Reihe gegen 3 anpassbare KI-Stufen',
       icon: '🐾',
       color: 'from-pink-600 to-purple-800',
-      badge: 'Up to 20 🪙',
-      stat: `${player.stats.tictactoeWins || 0} Wins`,
+      badge: 'Bis zu 25 🪙',
+      stat: `${player.stats.tictactoeWins || 0} Siege`,
     },
     {
       id: 'memory',
-      title: 'Cat Memory',
-      subtitle: 'Find 8 matching pairs of cute cat skins',
+      title: 'Katzen-Memory',
+      subtitle: 'Finde 8 passende Katzen-Paare im Kartenspiel',
       icon: '🎴',
       color: 'from-indigo-600 to-purple-900',
-      badge: '25 🪙',
-      stat: `${player.stats.memoryWins || 0} Wins`,
+      badge: '30 🪙',
+      stat: `${player.stats.memoryWins || 0} Siege`,
     },
     {
       id: 'catcatch',
-      title: 'Cat Catch',
-      subtitle: 'Catch fish, milk bottles & stars with the cozy basket',
+      title: 'Katzen-Fangspiel',
+      subtitle: 'Fange Fische, Milch und Sterne im gemütlichen Korb',
       icon: '🐟',
       color: 'from-blue-600 to-cyan-900',
-      badge: 'Up to 45 🪙',
-      stat: `Highscore: ${player.stats.catCatchHighScore || 0}`,
+      badge: 'Bis zu 50 🪙',
+      stat: `Rekord: ${player.stats.catCatchHighScore || 0}`,
     },
   ];
 
@@ -151,16 +151,16 @@ export const GamesView: React.FC<GamesViewProps> = ({
       }`}>
         <div className="flex items-center gap-2 mb-1">
           <Gamepad2 className="w-5 h-5 text-pink-500" />
-          <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Minigames Arcade</h2>
+          <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Minispiele Spielhalle</h2>
         </div>
         <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-          Play rewarding minigames to earn coins and star shards for legendary cats!
+          Spiele unterhaltsame Minispiele, um Münzen und Sternsplitter für neue Schatztruhen zu verdienen!
         </p>
 
         <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-slate-400">
-          <span>Played: <strong className={isLight ? 'text-slate-800' : 'text-white'}>{player.stats.gamesPlayed || 0}</strong></span>
+          <span>Gespielt: <strong className={isLight ? 'text-slate-800' : 'text-white'}>{player.stats.gamesPlayed || 0}</strong></span>
           <span>·</span>
-          <span>Won: <strong className="text-emerald-500 font-bold">{player.stats.gamesWon || 0}</strong></span>
+          <span>Gewonnen: <strong className="text-emerald-500 font-bold">{player.stats.gamesWon || 0}</strong></span>
         </div>
       </div>
 

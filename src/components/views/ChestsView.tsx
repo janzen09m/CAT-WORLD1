@@ -3,11 +3,12 @@ import { PlayerData, ChestConfig, CatSkin, Theme } from '../../types/game';
 import { CHESTS_CONFIG } from '../../data/chestsData';
 import { ChestOpenModal } from '../ChestOpenModal';
 import { soundManager } from '../../utils/audio';
-import { Key, Sparkles, Clock, History, ShoppingCart } from 'lucide-react';
+import { Key, Sparkles, History, ShoppingCart } from 'lucide-react';
 
 interface ChestsViewProps {
   player: PlayerData;
   onOpenChest: (chestId: ChestConfig['id'], useCoins: boolean) => Promise<{ droppedCat: CatSkin; isDuplicate: boolean; coinsAwarded?: number }>;
+  onEquipCat?: (catId: string) => Promise<void>;
   onOpenExchangeModal: () => void;
   theme?: Theme;
 }
@@ -15,6 +16,7 @@ interface ChestsViewProps {
 export const ChestsView: React.FC<ChestsViewProps> = ({
   player,
   onOpenChest,
+  onEquipCat,
   onOpenExchangeModal,
   theme = 'light',
 }) => {
@@ -32,11 +34,11 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className={`text-base font-black flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
-              <span>Treasure Chests</span>
+              <span>Schatztruhen</span>
               <span className="text-xs text-amber-500">✨</span>
             </h2>
             <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-              Use your keys or coins to draw mythical and legendary cats!
+              Öffne Truhen mit deinen Schlüsseln und ziehe seltene, epische & legendäre Katzen!
             </p>
           </div>
           <button
@@ -44,10 +46,10 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
               soundManager.playClick();
               onOpenExchangeModal();
             }}
-            className="text-[10px] font-bold text-amber-800 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1.5 rounded-xl transition-colors flex items-center gap-1"
+            className="text-[10px] font-bold text-amber-900 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1.5 rounded-xl transition-colors flex items-center gap-1"
           >
             <ShoppingCart className="w-3 h-3 text-amber-600" />
-            <span>Buy Keys</span>
+            <span>Schlüssel kaufen</span>
           </button>
         </div>
 
@@ -56,25 +58,25 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
           <div className={`p-1.5 rounded-xl border ${
             isLight ? 'bg-white border-amber-200 text-amber-900 shadow-xs' : 'bg-slate-900/60 border-amber-900/40 text-white'
           }`}>
-            <span className="text-amber-600 block font-sans font-bold">Wood</span>
+            <span className="text-amber-600 block font-sans font-bold">Holz</span>
             <span className="font-bold">{player.keys.wooden || 0}x</span>
           </div>
           <div className={`p-1.5 rounded-xl border ${
             isLight ? 'bg-white border-blue-200 text-blue-900 shadow-xs' : 'bg-slate-900/60 border-blue-900/40 text-white'
           }`}>
-            <span className="text-blue-500 block font-sans font-bold">Blue</span>
+            <span className="text-blue-500 block font-sans font-bold">Blau</span>
             <span className="font-bold">{player.keys.blue || 0}x</span>
           </div>
           <div className={`p-1.5 rounded-xl border ${
             isLight ? 'bg-white border-purple-200 text-purple-900 shadow-xs' : 'bg-slate-900/60 border-purple-900/40 text-white'
           }`}>
-            <span className="text-purple-500 block font-sans font-bold">Epic</span>
+            <span className="text-purple-500 block font-sans font-bold">Episch</span>
             <span className="font-bold">{player.keys.epic || 0}x</span>
           </div>
           <div className={`p-1.5 rounded-xl border ${
             isLight ? 'bg-white border-amber-300 text-amber-900 shadow-xs' : 'bg-slate-900/60 border-amber-700/40 text-white'
           }`}>
-            <span className="text-amber-500 block font-sans font-bold">Legendary</span>
+            <span className="text-amber-500 block font-sans font-bold">Legendär</span>
             <span className="font-bold">{player.keys.legendary || 0}x</span>
           </div>
         </div>
@@ -116,11 +118,11 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
                 <div className="flex items-center gap-2 mt-2 text-[10px] font-mono">
                   <span className={`font-bold flex items-center gap-1 ${hasKey ? 'text-emerald-500' : 'text-slate-400'}`}>
                     <Key className="w-3 h-3" />
-                    <span>{keysCount} in Stock</span>
+                    <span>{keysCount} vorhanden</span>
                   </span>
                   <span className="text-slate-400">·</span>
                   <span className="text-amber-500 font-bold">
-                    {chest.coinPrice.toLocaleString('en-US')} Coins
+                    {chest.coinPrice.toLocaleString('de-DE')} Münzen
                   </span>
                 </div>
               </div>
@@ -133,7 +135,7 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
                 }}
                 className="py-2.5 px-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-black rounded-xl text-white text-xs shadow-md shadow-pink-500/20 active:scale-95 shrink-0"
               >
-                Open
+                Öffnen
               </button>
             </div>
           );
@@ -148,17 +150,17 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
       }`}>
         <div className="flex items-center gap-1.5 mb-3">
           <History className="w-4 h-4 text-purple-500" />
-          <h3 className={`text-xs font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Recent Chest Openings</h3>
+          <h3 className={`text-xs font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Letzte Kistenfunde</h3>
         </div>
 
         {player.chestHistory.length === 0 ? (
           <p className="text-[11px] text-slate-400 italic text-center py-2">
-            No chests opened yet. Open your first treasure chest today!
+            Noch keine Kisten geöffnet. Hol dir jetzt deinen ersten Fund!
           </p>
         ) : (
           <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
             {player.chestHistory.slice(0, 8).map(entry => {
-              const dateStr = new Date(entry.timestamp).toLocaleTimeString('en-US', {
+              const dateStr = new Date(entry.timestamp).toLocaleTimeString('de-DE', {
                 hour: '2-digit',
                 minute: '2-digit',
               });
@@ -179,12 +181,12 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
                         <span>{entry.catName}</span>
                         {entry.isDuplicate && (
                           <span className="text-[9px] text-amber-600 font-bold">
-                            (+{entry.coinsAwarded || 100} Coins)
+                            (+{entry.coinsAwarded || 100} Münzen)
                           </span>
                         )}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono capitalize">
-                        {entry.rarity} · {entry.chestId} Chest
+                        {entry.rarity} · {entry.chestId}-Kiste
                       </div>
                     </div>
                   </div>
@@ -206,6 +208,7 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
           player={player}
           onClose={() => setSelectedChest(null)}
           onOpenConfirm={onOpenChest}
+          onEquipCat={onEquipCat}
           onOpenExchangeModal={onOpenExchangeModal}
           theme={theme}
         />

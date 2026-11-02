@@ -6,13 +6,14 @@ import { RARITY_CONFIG } from '../data/catsData';
 import { KEY_EXCHANGE_RATES } from '../data/chestsData';
 import { soundManager } from '../utils/audio';
 import { triggerHaptic } from '../utils/telegram';
-import { Sparkles, X, Key, Coins, Check } from 'lucide-react';
+import { Sparkles, X, Key, Check } from 'lucide-react';
 
 interface ChestOpenModalProps {
   chest: ChestConfig;
   player: PlayerData;
   onClose: () => void;
   onOpenConfirm: (chestId: ChestConfig['id'], useCoins: boolean) => Promise<{ droppedCat: CatSkin; isDuplicate: boolean; coinsAwarded?: number; shardsAwarded?: number }>;
+  onEquipCat?: (catId: string) => Promise<void>;
   onOpenExchangeModal?: () => void;
   theme?: Theme;
 }
@@ -22,16 +23,17 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
   player,
   onClose,
   onOpenConfirm,
+  onEquipCat,
   onOpenExchangeModal,
   theme = 'light',
 }) => {
   const [openingState, setOpeningState] = useState<'idle' | 'opening' | 'revealed'>('idle');
   const [reward, setReward] = useState<{ cat: CatSkin; isDuplicate: boolean; coinsAwarded?: number } | null>(null);
+  const [isEquipped, setIsEquipped] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isLight = theme === 'light';
   const hasKey = (player.keys[chest.keyRequired] || 0) >= 1;
-  const hasCoins = player.coins >= chest.coinPrice;
 
   const handleStartOpen = async (useCoins: boolean) => {
     soundManager.playClick();
@@ -70,8 +72,20 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
     } catch (err: any) {
       soundManager.playError();
       triggerHaptic('error');
-      setErrorMsg(err.message || 'Error opening chest');
+      setErrorMsg(err.message || 'Fehler beim Öffnen der Kiste');
       setOpeningState('idle');
+    }
+  };
+
+  const handleEquipDirectly = async () => {
+    if (!reward || !onEquipCat) return;
+    soundManager.playClick();
+    triggerHaptic('medium');
+    try {
+      await onEquipCat(reward.cat.id);
+      setIsEquipped(true);
+    } catch {
+      // ignore
     }
   };
 
@@ -128,7 +142,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                 : 'bg-slate-800/80 border-slate-700/60'
             }`}>
               <div className="text-[11px] font-bold mb-2 flex items-center justify-between">
-                <span className={isLight ? 'text-slate-700' : 'text-slate-300'}>Drop Rates:</span>
+                <span className={isLight ? 'text-slate-700' : 'text-slate-300'}>Drop-Chancen:</span>
                 <span className="text-[10px] text-emerald-500 font-mono font-bold">100% Transparent</span>
               </div>
               <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
@@ -136,7 +150,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   <div className={`p-1.5 rounded-lg border ${
                     isLight ? 'bg-white border-slate-200 text-slate-700' : 'bg-slate-900/60 border-slate-700/50 text-slate-200'
                   }`}>
-                    <span className="text-slate-400 block text-[9px]">Common</span>
+                    <span className="text-slate-400 block text-[9px]">Gewöhnlich</span>
                     <span className="font-bold">{chest.dropRates.common}%</span>
                   </div>
                 )}
@@ -144,7 +158,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   <div className={`p-1.5 rounded-lg border ${
                     isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
                   }`}>
-                    <span className="text-emerald-500 block text-[9px]">Uncommon</span>
+                    <span className="text-emerald-500 block text-[9px]">Ungewöhnlich</span>
                     <span className="font-bold">{chest.dropRates.uncommon}%</span>
                   </div>
                 )}
@@ -152,7 +166,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   <div className={`p-1.5 rounded-lg border ${
                     isLight ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-blue-950/40 border-blue-800/50 text-blue-300'
                   }`}>
-                    <span className="text-blue-500 block text-[9px]">Rare</span>
+                    <span className="text-blue-500 block text-[9px]">Selten</span>
                     <span className="font-bold">{chest.dropRates.rare}%</span>
                   </div>
                 )}
@@ -160,7 +174,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   <div className={`p-1.5 rounded-lg border ${
                     isLight ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-purple-950/40 border-purple-800/50 text-purple-300'
                   }`}>
-                    <span className="text-purple-500 block text-[9px]">Epic</span>
+                    <span className="text-purple-500 block text-[9px]">Episch (3D)</span>
                     <span className="font-bold">{chest.dropRates.epic}%</span>
                   </div>
                 )}
@@ -168,7 +182,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   <div className={`p-1.5 rounded-lg border ${
                     isLight ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-amber-950/40 border-amber-800/50 text-amber-300'
                   }`}>
-                    <span className="text-amber-500 block text-[9px]">Legendary</span>
+                    <span className="text-amber-500 block text-[9px]">Legendär</span>
                     <span className="font-bold">{chest.dropRates.legendary}%</span>
                   </div>
                 )}
@@ -176,7 +190,7 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   <div className={`p-1.5 rounded-lg border animate-pulse ${
                     isLight ? 'bg-pink-50 border-pink-200 text-pink-700' : 'bg-pink-950/40 border-pink-800/50 text-pink-300'
                   }`}>
-                    <span className="text-pink-500 block text-[9px]">Mythic</span>
+                    <span className="text-pink-500 block text-[9px]">Mythisch</span>
                     <span className="font-bold">{chest.dropRates.mythic}%</span>
                   </div>
                 )}
@@ -237,10 +251,10 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
             </div>
             <div>
               <h3 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-amber-500 animate-pulse">
-                Opening Chest...
+                Kiste öffnet sich...
               </h3>
               <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                A radiant burst of light emerges!
+                Ein strahlendes Licht bricht hervor!
               </p>
             </div>
           </div>
@@ -262,12 +276,6 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
                   Global #{reward.cat.mintNumber}
                 </span>
               )}
-
-              {reward.cat.dna && (
-                <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                  DNA: {reward.cat.dna}
-                </span>
-              )}
             </div>
 
             {/* Dropped Cat Presentation */}
@@ -286,22 +294,22 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
             <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-bold font-mono">
               {reward.cat.renderStyle === '3d-volumetric' && (
                 <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                  🔮 3D Volumetric Sculpt
+                  🔮 3D Volumetrisch
                 </span>
               )}
               {reward.cat.renderStyle === 'fluffy-legendary' && (
                 <span className="px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 border border-pink-500/30">
-                  ✨ Fluffy Fur Texture
+                  ✨ Flauschig
                 </span>
               )}
               {reward.cat.backgroundType && reward.cat.backgroundType !== 'none' && (
                 <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
-                  🌌 {reward.cat.backgroundType.replace('-', ' ')}
+                  🌌 Hintergrund
                 </span>
               )}
               {reward.cat.toy && reward.cat.toy !== 'none' && (
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  🧸 Toy: {reward.cat.toy.replace('-', ' ')}
+                  🧸 Spielzeug dabei
                 </span>
               )}
               {reward.cat.personality && (
@@ -314,30 +322,36 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
             {/* Success Unlocked Notice */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5 text-xs text-emerald-700 flex items-center justify-center gap-1.5">
               <Check className="w-4 h-4 text-emerald-500" />
-              <span className="font-bold">100% Unique Cat Added to Your Collection!</span>
+              <span className="font-bold">100% Einzigartige Katze zur Sammlung hinzugefügt!</span>
             </div>
 
-            {/* Stats Tag */}
-            <div className={`flex justify-center gap-6 text-xs font-mono border-t pt-3 ${isLight ? 'border-slate-100 text-slate-600' : 'border-slate-800 text-slate-300'}`}>
-              <div>
-                <span className="text-slate-400 block text-[10px]">Collector Rating</span>
-                <span className="font-bold text-amber-500">+{reward.cat.collectorValue}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px]">Category</span>
-                <span className="font-bold text-purple-500">{reward.cat.category}</span>
-              </div>
-            </div>
+            {/* Direct Equip & Continue Buttons */}
+            <div className="space-y-2 pt-2">
+              {onEquipCat && (
+                <button
+                  onClick={handleEquipDirectly}
+                  disabled={isEquipped}
+                  className={`w-full py-2.5 px-4 font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all ${
+                    isEquipped
+                      ? 'bg-emerald-600 text-white cursor-default'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-md active:scale-95'
+                  }`}
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isEquipped ? '✓ Als aktive Katze ausgerüstet!' : 'Direkt als aktive Katze ausrüsten'}</span>
+                </button>
+              )}
 
-            <button
-              onClick={() => {
-                soundManager.playClick();
-                onClose();
-              }}
-              className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-black rounded-xl text-white shadow-lg shadow-pink-500/25 transition-all"
-            >
-              Awesome! Continue
-            </button>
+              <button
+                onClick={() => {
+                  soundManager.playClick();
+                  onClose();
+                }}
+                className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-black rounded-xl text-white shadow-lg shadow-pink-500/25 transition-all text-xs"
+              >
+                Super! Weiter sammeln
+              </button>
+            </div>
           </div>
         )}
       </div>

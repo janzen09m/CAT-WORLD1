@@ -102,11 +102,11 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className={`text-base font-black flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
-              <span>My Cat Collection</span>
-              <span className="text-xs text-purple-500 font-mono font-bold">({ownedCatsCount} Unique)</span>
+              <span>Meine Katzensammlung</span>
+              <span className="text-xs text-purple-500 font-mono font-bold">({ownedCatsCount} Einzigartig)</span>
             </h2>
             <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              100% uniquely generated cats with verifiable Global Mint # serials!
+              100% einzigartig generierte Katzen mit globaler Seriennummer!
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -133,10 +133,10 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
                   onOpenTradingMarket();
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-pink-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-white text-xs font-bold shadow-md shadow-pink-500/20 active:scale-95 transition-all"
-                title="Open Trading Market"
+                title="Tausch-Marktplatz öffnen"
               >
                 <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Trade Market</span>
+                <span>Marktplatz</span>
               </button>
             )}
           </div>
@@ -145,19 +145,19 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
         {/* Global Mint stats row */}
         <div className="grid grid-cols-3 gap-2 text-center text-xs">
           <div className={`p-2 rounded-2xl border ${isLight ? 'bg-white/90 border-purple-100 shadow-xs' : 'bg-slate-900/80 border-slate-800'}`}>
-            <span className={`block text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Global Serials</span>
+            <span className={`block text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Globale Nummern</span>
             <span className="font-mono font-extrabold text-amber-500">
-              {ownedCatsCount > 0 ? (lowestMint === highestMint ? `#${lowestMint}` : `#${lowestMint} - #${highestMint}`) : 'None'}
+              {ownedCatsCount > 0 ? (lowestMint === highestMint ? `#${lowestMint}` : `#${lowestMint} - #${highestMint}`) : 'Keine'}
             </span>
           </div>
           <div className={`p-2 rounded-2xl border ${isLight ? 'bg-white/90 border-purple-100 shadow-xs' : 'bg-slate-900/80 border-slate-800'}`}>
-            <span className={`block text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Total Owned</span>
+            <span className={`block text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Gesamt im Besitz</span>
             <span className="font-mono font-extrabold text-purple-600 dark:text-purple-400">
               {ownedCatsCount} 🐱
             </span>
           </div>
           <div className={`p-2 rounded-2xl border ${isLight ? 'bg-white/90 border-purple-100 shadow-xs' : 'bg-slate-900/80 border-slate-800'}`}>
-            <span className={`block text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Collector Rating</span>
+            <span className={`block text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Sammler-Wertung</span>
             <span className="font-mono font-extrabold text-pink-500">
               +{totalCollectorValue} ⭐
             </span>
@@ -174,7 +174,7 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search by name, #mint (e.g. #1), trait, toy..."
+            placeholder="Nach Name, Nummer (z.B. #1), Spielzeug suchen..."
             className={`w-full rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-pink-500 border transition-colors ${
               isLight
                 ? 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 shadow-xs'
@@ -191,7 +191,7 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
           )}
         </div>
 
-        {/* Filter Controls Row (Favorites toggle + Sorting) */}
+        {/* Filter Controls Row */}
         <div className="flex items-center justify-between gap-2">
           {/* Favorite filter toggle */}
           <button
@@ -208,7 +208,7 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
             }`}
           >
             <Star className={`w-3.5 h-3.5 ${favoriteOnly ? 'fill-white text-white' : 'text-amber-400'}`} />
-            <span>Favorites only</span>
+            <span>Nur Favoriten</span>
           </button>
 
           {/* Sort Selector */}
@@ -224,10 +224,10 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
                 isLight ? 'bg-white border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
               }`}
             >
-              <option value="mint-asc">Mint #1 → Top</option>
-              <option value="mint-desc">Newest Mint First</option>
-              <option value="rarity-desc">Rarity (Highest)</option>
-              <option value="rarity-asc">Rarity (Lowest)</option>
+              <option value="mint-asc">Nummer #1 aufsteigend</option>
+              <option value="mint-desc">Neueste Nummer zuerst</option>
+              <option value="rarity-desc">Seltenheit (Höchste)</option>
+              <option value="rarity-asc">Seltenheit (Niedrigste)</option>
             </select>
           </div>
         </div>
@@ -249,7 +249,7 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
             }`}
           >
-            All Rarities ({myOwnedCats.length})
+            Alle Seltenheiten ({myOwnedCats.length})
           </button>
 
           {(Object.keys(RARITY_CONFIG) as Rarity[]).map(r => {
@@ -266,7 +266,7 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
                 }}
                 className={`px-3 py-1 rounded-full shrink-0 border transition-all font-mono ${
                   isSelected
-                    ? 'border-white text-white font-black shadow-sm'
+                    ? 'border-white text-white font-black shadow-xs'
                     : isLight
                     ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
@@ -287,12 +287,12 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
       {filteredCats.length === 0 ? (
         <div className={`rounded-3xl p-8 text-center text-xs border ${
           isLight
-            ? 'bg-white border-slate-200 text-slate-500 shadow-sm'
+            ? 'bg-white border-slate-200 text-slate-500 shadow-xs'
             : 'bg-slate-900/60 border-slate-800 text-slate-400'
         }`}>
           <div className="text-4xl mb-2">🐾</div>
-          <p className="font-bold text-sm mb-1">No cats found matching your filters</p>
-          <p className="text-[11px] mb-4">Every cat drop is 100% unique! Open chests or trade with players to discover new unique cats.</p>
+          <p className="font-bold text-sm mb-1">Keine Katzen mit diesen Filtern gefunden</p>
+          <p className="text-[11px] mb-4">Jeder Katzen-Drop ist 100% einzigartig! Öffne Kisten oder tausche auf dem Marktplatz, um neue Katzen zu entdecken.</p>
           <div className="flex justify-center gap-2">
             <button
               onClick={() => {
@@ -302,14 +302,14 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
               }}
               className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold"
             >
-              Reset Filters
+              Filter zurücksetzen
             </button>
             {onOpenTradingMarket && (
               <button
                 onClick={onOpenTradingMarket}
                 className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-pink-500 text-white text-xs font-bold"
               >
-                Trade Market
+                Marktplatz
               </button>
             )}
           </div>

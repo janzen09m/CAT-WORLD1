@@ -185,11 +185,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       }`}>
         {(
           [
-            { id: 'stats', label: 'Stats' },
-            { id: 'tasks', label: 'Tasks' },
-            { id: 'achievements', label: 'Badges' },
-            { id: 'leaderboard', label: 'Ranks' },
-            { id: 'settings', label: 'Theme' },
+            { id: 'stats', label: 'Statistik' },
+            { id: 'tasks', label: 'Aufgaben' },
+            { id: 'achievements', label: 'Erfolge' },
+            { id: 'leaderboard', label: 'Rangliste' },
+            { id: 'settings', label: 'Design' },
           ] as const
         ).map(tab => (
           <button
@@ -200,7 +200,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             }}
             className={`py-2 rounded-xl transition-all text-center ${
               activeTab === tab.id
-                ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-sm font-black'
+                ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-xs font-black'
                 : 'hover:text-slate-800'
             }`}
           >
@@ -456,7 +456,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       )}
 
-      {/* --- TAB 5: SETTINGS & THEME TOGGLE --- */}
+      {/* --- TAB 5: EINSTELLUNGEN & DESIGN --- */}
       {activeTab === 'settings' && (
         <div className="space-y-3">
           <div className={`rounded-2xl p-4 border space-y-4 ${
@@ -464,8 +464,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           }`}>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className={`text-xs font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>App Appearance</h4>
-                <p className="text-[10px] text-slate-400 mt-0.5">Toggle between Day Light View and Dark Night View</p>
+                <h4 className={`text-xs font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>App-Erscheinungsbild</h4>
+                <p className="text-[10px] text-slate-400 mt-0.5">Wechsle zwischen heller Tagesansicht und dunklem Nachtmodus</p>
               </div>
               <button
                 onClick={() => {
@@ -473,21 +473,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   triggerHaptic('medium');
                   onToggleTheme?.();
                 }}
-                className={`py-2 px-3.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm ${
+                className={`py-2 px-3.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all shadow-xs ${
                   isLight
                     ? 'bg-amber-500 text-white hover:bg-amber-600'
                     : 'bg-purple-600 text-white hover:bg-purple-500'
                 }`}
               >
                 {isLight ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                <span>{isLight ? 'Light View (Active)' : 'Dark View (Active)'}</span>
+                <span>{isLight ? 'Hellmodus (Aktiv)' : 'Dunkelmodus (Aktiv)'}</span>
               </button>
             </div>
 
             <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
               <div>
-                <h4 className={`text-xs font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>Audio Effects</h4>
-                <p className="text-[10px] text-slate-400 mt-0.5">Retro Web Audio synthesizer sound effects</p>
+                <h4 className={`text-xs font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>Audio-Effekte</h4>
+                <p className="text-[10px] text-slate-400 mt-0.5">Retro Web-Audio Synthesizer Klänge</p>
               </div>
               <button
                 onClick={handleToggleSound}
@@ -502,16 +502,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       )}
 
-      {/* Edit Names Modal */}
+      {/* Namen bearbeiten Dialog */}
       {isEditingNames && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className={`w-full max-w-sm rounded-3xl p-5 space-y-4 border ${
             isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-700 text-white'
           }`}>
-            <h3 className="text-base font-black">Edit Names</h3>
+            <h3 className="text-base font-black">Namen bearbeiten</h3>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Player Name:</label>
+              <label className="text-xs text-slate-400 block mb-1">Spielername:</label>
               <input
                 type="text"
                 value={playerNameInput}
@@ -524,7 +524,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Cat Custom Name:</label>
+              <label className="text-xs text-slate-400 block mb-1">Eigener Katzenname:</label>
               <input
                 type="text"
                 value={catNameInput}
@@ -543,13 +543,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   isLight ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'
                 }`}
               >
-                Cancel
+                Abbrechen
               </button>
               <button
                 onClick={handleSaveNames}
                 className="py-2.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-md"
               >
-                Save
+                Speichern
               </button>
             </div>
           </div>

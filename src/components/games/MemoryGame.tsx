@@ -3,7 +3,7 @@ import { CAT_SKINS } from '../../data/catsData';
 import { CatIllustration } from '../CatIllustration';
 import { soundManager } from '../../utils/audio';
 import { triggerHaptic } from '../../utils/telegram';
-import { ArrowLeft, RefreshCw, Trophy, Timer } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { Theme } from '../../types/game';
 
 interface MemoryGameProps {
@@ -22,7 +22,7 @@ interface CardItem {
 export const MemoryGame: React.FC<MemoryGameProps> = ({
   onBack,
   onGameComplete,
-  theme = 'dark',
+  theme = 'light',
 }) => {
   const [cards, setCards] = useState<CardItem[]>([]);
   const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
@@ -35,7 +35,6 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({
 
   // Initialize 8 pairs (16 cards)
   const setupGame = () => {
-    // Pick 8 random distinct cats
     const shuffledCats = [...CAT_SKINS].sort(() => 0.5 - Math.random()).slice(0, 8);
     const deck: CardItem[] = [];
 
@@ -58,67 +57,63 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({
   }, []);
 
   const handleCardClick = (index: number) => {
-    if (
-      flippedIndices.length >= 2 ||
-      cards[index].isFlipped ||
-      cards[index].isMatched ||
-      isGameOver
-    ) {
+    if (cards[index].isFlipped || cards[index].isMatched || flippedIndices.length >= 2 || isGameOver) {
       return;
     }
 
-    soundManager.playClick();
+    soundManager.playPop();
     triggerHaptic('light');
 
+    const nextCards = [...cards];
+    nextCards[index].isFlipped = true;
+    setCards(nextCards);
+
     const nextFlipped = [...flippedIndices, index];
-    const newCards = [...cards];
-    newCards[index].isFlipped = true;
-    setCards(newCards);
     setFlippedIndices(nextFlipped);
 
     if (nextFlipped.length === 2) {
       setMoves(m => m + 1);
-      const [idx1, idx2] = nextFlipped;
-      const card1 = newCards[idx1];
-      const card2 = newCards[idx2];
+      const [firstIdx, secondIdx] = nextFlipped;
 
-      if (card1.catId === card2.catId) {
-        // MATCH!
+      if (cards[firstIdx].catId === cards[secondIdx].catId) {
+        // Matched
         setTimeout(() => {
           soundManager.playCoin();
           triggerHaptic('success');
-          card1.isMatched = true;
-          card2.isMatched = true;
-          setCards([...newCards]);
+          nextCards[firstIdx].isMatched = true;
+          nextCards[secondIdx].isMatched = true;
+          setCards([...nextCards]);
           setFlippedIndices([]);
 
           const nextMatches = matchesFound + 1;
           setMatchesFound(nextMatches);
 
           if (nextMatches >= 8) {
-            handleVictory(moves + 1);
+            handleWin(moves + 1);
           }
-        }, 400);
+        }, 450);
       } else {
-        // NO MATCH -> flip back
+        // Not a match
         setTimeout(() => {
-          card1.isFlipped = false;
-          card2.isFlipped = false;
-          setCards([...newCards]);
+          nextCards[firstIdx].isFlipped = false;
+          nextCards[secondIdx].isFlipped = false;
+          setCards([...nextCards]);
           setFlippedIndices([]);
         }, 900);
       }
     }
   };
 
-  const handleVictory = async (finalMoves: number) => {
+  const handleWin = async (finalMoves: number) => {
     setIsGameOver(true);
     soundManager.playWinFanfare();
     triggerHaptic('success');
 
     try {
       const res = await onGameComplete('win', finalMoves);
-      setRewardMsg(`Found all 8 cat pairs! Earned +${res.coinsEarned} Coins! 🎉`);
+      if (res?.coinsEarned) {
+        setRewardMsg(`+${res.coinsEarned} Münzen verdient! 🪙`);
+      }
     } catch {
       // ignore
     }
@@ -126,57 +121,51 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({
 
   return (
     <div className="space-y-4 max-w-sm mx-auto select-none">
-      {/* Top Header */}
+      {/* Header bar */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => {
-            soundManager.playClick();
-            onBack();
-          }}
-          className={`p-2 rounded-xl flex items-center gap-1 text-xs font-bold border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          onClick={onBack}
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
         </button>
 
-        <h3 className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>Cat Memory</h3>
+        <h3 className={`font-black text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>
+          Katzen-Memory
+        </h3>
 
         <button
           onClick={() => {
             soundManager.playClick();
             setupGame();
           }}
-          className={`p-2 rounded-xl border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
-          title="Restart"
+          title="Neu starten"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Stats row */}
-      <div className={`rounded-2xl p-2.5 flex items-center justify-around text-center border ${
-        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-800/90 border-slate-700/80'
+      {/* Stats HUD */}
+      <div className={`p-2.5 rounded-2xl flex items-center justify-around text-xs font-mono border ${
+        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/90 border-slate-800'
       }`}>
         <div>
-          <span className="text-[10px] text-slate-400 font-bold block">Pairs Matched</span>
-          <span className="text-lg font-black text-emerald-500 font-mono">{matchesFound} / 8</span>
+          <span className="text-slate-400 block text-[10px]">Züge:</span>
+          <span className={`text-base font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>{moves}</span>
         </div>
         <div>
-          <span className="text-[10px] text-slate-400 font-bold block">Moves</span>
-          <span className={`text-lg font-black font-mono ${isLight ? 'text-slate-800' : 'text-white'}`}>{moves}</span>
+          <span className="text-slate-400 block text-[10px]">Paare gefunden:</span>
+          <span className="text-base font-black text-pink-500">{matchesFound} / 8</span>
         </div>
       </div>
 
-      {/* 4x4 Grid of Cards */}
-      <div className={`grid grid-cols-4 gap-2 p-2 rounded-2xl shadow-xl border ${
+      {/* 4x4 Memory Grid */}
+      <div className={`grid grid-cols-4 gap-2 p-3 rounded-2xl shadow-xl border ${
         isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-700/80'
       }`}>
         {cards.map((card, idx) => {
@@ -218,8 +207,8 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({
           isLight ? 'bg-white border-purple-200 shadow-md text-slate-800' : 'bg-slate-800/95 border-purple-500/30 text-white'
         }`}>
           <div className="text-3xl">🎉🐱🎉</div>
-          <div className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>Outstanding Memory!</div>
-          <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>You revealed all pairs in {moves} moves.</p>
+          <div className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>Hervorragendes Gedächtnis!</div>
+          <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>Du hast alle Paare in {moves} Zügen aufgedeckt.</p>
 
           {rewardMsg && (
             <div className={`text-xs font-bold p-2 rounded-xl border ${
@@ -236,7 +225,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({
             }}
             className="w-full py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-bold text-xs rounded-xl text-white shadow-lg transition-all"
           >
-            Play Another Round
+            Neue Runde spielen
           </button>
         </div>
       )}

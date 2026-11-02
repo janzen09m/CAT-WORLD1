@@ -1,8 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import pg from 'pg';
 import { PlayerData, LeaderboardEntry, CatSkin } from '../types/game';
 import { CAT_SKINS, GET_CAT_BY_ID } from '../data/catsData';
 import { INITIAL_DAILY_TASKS, INITIAL_ACHIEVEMENTS } from '../data/tasksAndAchievements';
+
+const { Pool } = pg;
 
 const isVercel = Boolean(process.env.VERCEL);
 const DATA_DIR = isVercel
@@ -10,6 +13,24 @@ const DATA_DIR = isVercel
   : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
 const BUNDLED_DB_FILE = path.resolve(process.cwd(), 'data', 'catworld_store.json');
+
+// PostgreSQL Connection Pool (for Vercel Postgres / Neon / Supabase / Cloud SQL)
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+let pgPool: pg.Pool | null = null;
+
+if (connectionString) {
+  try {
+    pgPool = new Pool({
+      connectionString,
+      ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
+    console.log('🐘 PostgreSQL pool initialized successfully');
+  } catch (err) {
+    console.warn('PostgreSQL pool creation failed, falling back to local store:', err);
+  }
+}
 
 interface DatabaseStore {
   players: Record<string, PlayerData>;
@@ -23,6 +44,123 @@ let memoryStore: DatabaseStore = {
   serverStartedAt: new Date().toISOString(),
   nextGlobalMintNumber: 1,
 };
+
+// Initialize PostgreSQL tables if pool is active
+async function initPgTables() {
+  if (!pgPool) return;
+  try {
+    const client = await pgPool.connect();
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS players (
+          id VARCHAR(64) PRIMARY KEY,
+          telegram_user_id BIGINT,
+          telegram_username VARCHAR(128),
+          player_name VARCHAR(64) NOT NULL DEFAULT 'Katzenfreund',
+          cat_custom_name VARCHAR(64) NOT NULL DEFAULT 'Schneeflöckchen',
+          active_cat_id VARCHAR(32) NOT NULL DEFAULT 'cat-01',
+          coins INTEGER NOT NULL DEFAULT 500,
+          keys_wooden INTEGER NOT NULL DEFAULT 2,
+          keys_blue INTEGER NOT NULL DEFAULT 1,
+          keys_epic INTEGER NOT NULL DEFAULT 0,
+          keys_legendary INTEGER NOT NULL DEFAULT 0,
+          room_background VARCHAR(32) NOT NULL DEFAULT 'cozy_living',
+          login_streak INTEGER NOT NULL DEFAULT 1,
+          last_login_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          daily_login_claimed_today BOOLEAN NOT NULL DEFAULT FALSE,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS global_meta (
+          key VARCHAR(64) PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_players_tg_uid ON players(telegram_user_id);
+      `);
+
+      // Load global mint counter from DB
+      const metaRes = await client.query(`SELECT value FROM global_meta WHERE key = 'nextGlobalMintNumber'`);
+      if (metaRes.rows.length > 0 && typeof metaRes.rows[0].value === 'number') {
+        memoryStore.nextGlobalMintNumber = Math.max(memoryStore.nextGlobalMintNumber || 1, metaRes.rows[0].value);
+      }
+
+      // Load existing players from PostgreSQL
+      const playersRes = await client.query(`SELECT id, data FROM players`);
+      for (const row of playersRes.rows) {
+        if (row.data && row.data.id) {
+          memoryStore.players[row.data.id] = row.data;
+        }
+      }
+      console.log(`🐘 Loaded ${playersRes.rows.length} players from PostgreSQL database`);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error initializing PostgreSQL tables:', err);
+  }
+}
+
+// Write a player record to PostgreSQL asynchronously in background
+function savePlayerToPg(player: PlayerData) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO players (
+      id, telegram_user_id, telegram_username, player_name, cat_custom_name,
+      active_cat_id, coins, keys_wooden, keys_blue, keys_epic, keys_legendary,
+      room_background, login_streak, last_login_date, daily_login_claimed_today,
+      data, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      telegram_user_id = EXCLUDED.telegram_user_id,
+      telegram_username = EXCLUDED.telegram_username,
+      player_name = EXCLUDED.player_name,
+      cat_custom_name = EXCLUDED.cat_custom_name,
+      active_cat_id = EXCLUDED.active_cat_id,
+      coins = EXCLUDED.coins,
+      keys_wooden = EXCLUDED.keys_wooden,
+      keys_blue = EXCLUDED.keys_blue,
+      keys_epic = EXCLUDED.keys_epic,
+      keys_legendary = EXCLUDED.keys_legendary,
+      room_background = EXCLUDED.room_background,
+      login_streak = EXCLUDED.login_streak,
+      last_login_date = EXCLUDED.last_login_date,
+      daily_login_claimed_today = EXCLUDED.daily_login_claimed_today,
+      data = EXCLUDED.data,
+      updated_at = NOW()`,
+    [
+      player.id,
+      player.telegramUserId || null,
+      player.telegramUsername || null,
+      player.playerName,
+      player.catCustomName,
+      player.activeCatId,
+      player.coins,
+      player.keys.wooden || 0,
+      player.keys.blue || 0,
+      player.keys.epic || 0,
+      player.keys.legendary || 0,
+      player.roomBackground,
+      player.loginStreak || 1,
+      player.lastLoginDate || new Date().toISOString().split('T')[0],
+      player.dailyLoginClaimedToday || false,
+      JSON.stringify(player),
+    ]
+  ).catch(err => {
+    console.error(`PostgreSQL save error for player ${player.id}:`, err);
+  });
+}
+
+function saveMintNumberToPg(mintNumber: number) {
+  if (!pgPool) return;
+  pgPool.query(
+    `INSERT INTO global_meta (key, value, updated_at) VALUES ('nextGlobalMintNumber', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [JSON.stringify(mintNumber)]
+  ).catch(() => {});
+}
 
 // Initialize file storage safely across both local Node and Vercel Serverless
 function ensureDataDir() {
@@ -68,6 +206,11 @@ function ensureDataDir() {
 
   // Number any cats if present
   syncAndNumberAllExistingCats();
+
+  // Try PostgreSQL connection in background
+  if (pgPool) {
+    initPgTables().catch(() => {});
+  }
 }
 
 let isWriting = false;
@@ -175,6 +318,7 @@ export function getNextGlobalMintNumber(): number {
   const next = memoryStore.nextGlobalMintNumber;
   memoryStore.nextGlobalMintNumber += 1;
   saveToDisk();
+  saveMintNumberToPg(memoryStore.nextGlobalMintNumber);
   return next;
 }
 
@@ -185,13 +329,26 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
   const now = new Date().toISOString();
   const todayStr = now.split('T')[0];
 
+  // Guaranteed starter cat (cat-01 White Cat) for every new player
+  const starterBase = GET_CAT_BY_ID('cat-01');
+  const starterMint = getNextGlobalMintNumber();
+  const starterSkin: CatSkin = {
+    ...starterBase,
+    name: `${starterBase.name} #${starterMint}`,
+    mintNumber: starterMint,
+    dna: starterBase.dna || `DNA-GLOBAL-${starterMint.toString().padStart(6, '0')}`,
+    generation: 1,
+    isProcedural: false,
+    personality: 'Treuer Starter-Gefährte',
+  };
+
   const newPlayer: PlayerData = {
     id,
     telegramUserId: tgUser?.id,
     telegramUsername: tgUser?.username,
-    playerName: tgUser?.name || 'Cat Lover',
-    catCustomName: 'Snowflake',
-    activeCatId: '',
+    playerName: tgUser?.name || 'Katzenfreund',
+    catCustomName: 'Schneeflöckchen',
+    activeCatId: 'cat-01',
     createdAt: now,
     coins: 500,
     starShards: 0,
@@ -201,7 +358,14 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
       epic: 0,
       legendary: 0,
     },
-    ownedCats: {},
+    ownedCats: {
+      'cat-01': {
+        count: 1,
+        unlockedAt: now,
+        isFavorite: true,
+        customSkin: starterSkin,
+      },
+    },
     roomBackground: 'cozy_living',
     stats: {
       gamesPlayed: 0,
@@ -225,11 +389,18 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
     chestHistory: [],
   };
 
+  // Sync starter cat to collection achievement
+  newPlayer.achievements.forEach(ach => {
+    if (ach.id === 'ach-collector-5') {
+      ach.current = 1;
+    }
+  });
+
   memoryStore.players[id] = newPlayer;
   saveToDisk();
+  savePlayerToPg(newPlayer);
   return newPlayer;
 }
-
 
 export function getPlayer(id: string): PlayerData | null {
   const player = memoryStore.players[id];
@@ -241,8 +412,41 @@ export function getPlayer(id: string): PlayerData | null {
     player.stats.keysBought = 0;
   }
 
-  // Check if any owned cats lack customSkin or mintNumber
   let needsSave = false;
+
+  // Guarantee starter cat if player has 0 cats (fixes any previous desync)
+  if (Object.keys(player.ownedCats).length === 0) {
+    const starterBase = GET_CAT_BY_ID('cat-01');
+    const starterMint = getNextGlobalMintNumber();
+    const starterSkin: CatSkin = {
+      ...starterBase,
+      name: `${starterBase.name} #${starterMint}`,
+      mintNumber: starterMint,
+      dna: starterBase.dna || `DNA-GLOBAL-${starterMint.toString().padStart(6, '0')}`,
+      generation: 1,
+      isProcedural: false,
+      personality: 'Treuer Starter-Gefährte',
+    };
+    player.ownedCats['cat-01'] = {
+      count: 1,
+      unlockedAt: player.createdAt || new Date().toISOString(),
+      isFavorite: true,
+      customSkin: starterSkin,
+    };
+    player.activeCatId = 'cat-01';
+    needsSave = true;
+  }
+
+  // Ensure activeCatId points to a valid owned cat
+  if (!player.activeCatId || !player.ownedCats[player.activeCatId]) {
+    const firstCatId = Object.keys(player.ownedCats)[0];
+    if (firstCatId) {
+      player.activeCatId = firstCatId;
+      needsSave = true;
+    }
+  }
+
+  // Check if any owned cats lack customSkin or mintNumber
   for (const [catId, info] of Object.entries(player.ownedCats)) {
     if (!info.customSkin || !info.customSkin.mintNumber) {
       const mintNum = getNextGlobalMintNumber();
@@ -260,8 +464,19 @@ export function getPlayer(id: string): PlayerData | null {
     }
   }
 
+  // Ensure collection achievements match true owned count
+  const ownedCount = Object.keys(player.ownedCats).length;
+  player.achievements.forEach(ach => {
+    if (ach.id === 'ach-collector-5') ach.current = Math.max(ach.current, ownedCount);
+    if (ach.id === 'ach-collector-15') ach.current = Math.max(ach.current, ownedCount);
+    if (ach.id === 'ach-collector-30') ach.current = Math.max(ach.current, ownedCount);
+    if (ach.id === 'ach-collector-all') ach.current = Math.max(ach.current, ownedCount);
+    if (ach.current >= ach.goal) ach.unlocked = true;
+  });
+
   if (needsSave) {
     saveToDisk();
+    savePlayerToPg(player);
   }
 
   // Check daily reset
@@ -276,6 +491,7 @@ export function getOrCreatePlayer(id: string, tgUser?: { id?: number; name?: str
       existing.telegramUserId = tgUser.id;
       existing.telegramUsername = tgUser.username;
       saveToDisk();
+      savePlayerToPg(existing);
     }
     return existing;
   }
@@ -285,6 +501,7 @@ export function getOrCreatePlayer(id: string, tgUser?: { id?: number; name?: str
 export function savePlayer(player: PlayerData): void {
   memoryStore.players[player.id] = player;
   saveToDisk();
+  savePlayerToPg(player);
 }
 
 function checkDailyReset(player: PlayerData): void {

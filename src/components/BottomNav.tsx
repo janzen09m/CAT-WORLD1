@@ -17,17 +17,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   onTabChange,
   unclaimedRewardsCount,
-  theme = 'dark',
+  theme = 'light',
 }) => {
   const isLight = theme === 'light';
 
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'cats', label: 'Cats', icon: Cat },
-    { id: 'chests', label: 'Chests', icon: Package },
-    { id: 'games', label: 'Games', icon: Gamepad2 },
+    { id: 'home', label: 'Start', icon: Home },
+    { id: 'cats', label: 'Katzen', icon: Cat },
+    { id: 'chests', label: 'Kisten', icon: Package },
+    { id: 'games', label: 'Spiele', icon: Gamepad2 },
     { id: 'shop', label: 'Shop', icon: ShoppingBag },
-    { id: 'profile', label: 'Profile', icon: Trophy, badge: unclaimedRewardsCount },
+    { id: 'profile', label: 'Profil', icon: Trophy, badge: unclaimedRewardsCount },
   ];
 
   const handleTabClick = (tabId: TabType) => {

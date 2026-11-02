@@ -6,7 +6,7 @@ import { KEY_EXCHANGE_RATES } from '../../data/chestsData';
 import { CatIllustration } from '../CatIllustration';
 import { soundManager } from '../../utils/audio';
 import { triggerHaptic } from '../../utils/telegram';
-import { ShoppingBag, Search, Sparkles, Coins, Key, Check, AlertCircle, Crown, ShoppingCart } from 'lucide-react';
+import { ShoppingBag, Search, Coins, Key, Check, AlertCircle, ShoppingCart } from 'lucide-react';
 
 interface ShopViewProps {
   player: PlayerData;
@@ -48,7 +48,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
   const handlePurchaseCat = async (cat: CatSkin) => {
     if (player.coins < cat.price) {
       soundManager.playError();
-      setErrorMsg('Not enough coins to purchase this cat!');
+      setErrorMsg('Nicht genügend Münzen vorhanden!');
       return;
     }
 
@@ -63,8 +63,8 @@ export const ShopView: React.FC<ShopViewProps> = ({
       triggerHaptic('success');
       setPurchaseSuccess(
         res.isDuplicate
-          ? `${cat.name} purchased! Duplicate bonus awarded: +${res.duplicateCoinsGained || getDuplicateCoinBonus(cat)} Coins! 🪙🎉`
-          : `${cat.name} successfully unlocked! 🐱🎉`
+          ? `${cat.name} gekauft! Duplikat-Bonus erhalten: +${res.duplicateCoinsGained || getDuplicateCoinBonus(cat)} Münzen! 🪙🎉`
+          : `${cat.name} erfolgreich freigeschaltet! 🐱🎉`
       );
 
       confetti({
@@ -76,7 +76,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
       setSelectedCatToBuy(null);
     } catch (err: any) {
       soundManager.playError();
-      setErrorMsg(err.message || 'Purchase failed');
+      setErrorMsg(err.message || 'Kauf fehlgeschlagen');
     } finally {
       setIsProcessing(false);
     }
@@ -88,7 +88,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
 
     if (player.coins < totalCost) {
       soundManager.playError();
-      setErrorMsg(`Not enough coins for ${amount}x ${rate.name}!`);
+      setErrorMsg(`Nicht genügend Münzen für ${amount}x ${rate.name}!`);
       return;
     }
 
@@ -101,7 +101,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
       await onBuyKey(keyType, amount);
       soundManager.playCoin();
       triggerHaptic('success');
-      setPurchaseSuccess(`Purchased ${amount}x ${rate.name} for ${totalCost.toLocaleString('en-US')} Coins! 🗝️`);
+      setPurchaseSuccess(`${amount}x ${rate.name} für ${totalCost.toLocaleString('de-DE')} Münzen gekauft! 🗝️`);
 
       confetti({
         particleCount: 35,
@@ -110,7 +110,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
       });
     } catch (err: any) {
       soundManager.playError();
-      setErrorMsg(err.message || 'Key purchase failed');
+      setErrorMsg(err.message || 'Schlüsselkauf fehlgeschlagen');
     } finally {
       setIsProcessing(false);
     }
@@ -130,22 +130,22 @@ export const ShopView: React.FC<ShopViewProps> = ({
               <ShoppingBag className="w-4 h-4" />
             </div>
             <div>
-              <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Cat & Key Shop</h2>
+              <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Katzen- & Schlüssel-Shop</h2>
               <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Spend your coins on exotic skins or stocking up on chest keys.
+                Tausche Münzen gegen Kistenschlüssel oder schalte besondere Katzen direkt frei.
               </p>
             </div>
           </div>
 
           <div className="text-right">
-            <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Your Coins</span>
+            <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Dein Guthaben</span>
             <span className="text-sm font-black text-amber-500 font-mono">
-              {player.coins.toLocaleString('en-US')} 🪙
+              {player.coins.toLocaleString('de-DE')} 🪙
             </span>
           </div>
         </div>
 
-        {/* Tab switch: Cats vs Keys */}
+        {/* Tab-Wechsel: Katzen vs Schlüssel */}
         <div className={`grid grid-cols-2 gap-1 p-1 rounded-xl text-xs font-bold mt-2 ${
           isLight ? 'bg-white/80 border border-slate-200' : 'bg-slate-900/80'
         }`}>
@@ -157,11 +157,11 @@ export const ShopView: React.FC<ShopViewProps> = ({
             }}
             className={`py-1.5 rounded-lg transition-all ${
               activeTab === 'cats'
-                ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-sm'
+                ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-xs'
                 : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
             }`}
           >
-            Cat Skins
+            Katzen-Skins
           </button>
           <button
             onClick={() => {
@@ -171,16 +171,16 @@ export const ShopView: React.FC<ShopViewProps> = ({
             }}
             className={`py-1.5 rounded-lg transition-all ${
               activeTab === 'keys'
-                ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-sm'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-xs'
                 : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
             }`}
           >
-            Buy Keys with Coins
+            Schlüssel mit Münzen kaufen
           </button>
         </div>
       </div>
 
-      {/* Notifications */}
+      {/* Benachrichtigungen */}
       {purchaseSuccess && (
         <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 text-xs text-emerald-800 flex items-center justify-between animate-in fade-in">
           <div className="flex items-center gap-1.5">
@@ -205,10 +205,10 @@ export const ShopView: React.FC<ShopViewProps> = ({
         </div>
       )}
 
-      {/* --- TAB 1: CATS CATALOG --- */}
+      {/* --- TAB 1: KATZEN KATALOG --- */}
       {activeTab === 'cats' && (
         <div className="space-y-3">
-          {/* Search & Filter pills */}
+          {/* Suche & Filter */}
           <div className="space-y-2">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -216,87 +216,54 @@ export const ShopView: React.FC<ShopViewProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search skins in shop..."
+                placeholder="Katzen im Shop suchen..."
                 className={`w-full rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-pink-500 border transition-colors ${
-                  isLight
-                    ? 'bg-white border-slate-200 text-slate-800 placeholder-slate-400'
-                    : 'bg-slate-900 border-slate-800 text-white placeholder-slate-500'
+                  isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900/80 border-slate-800 text-white'
                 }`}
               />
             </div>
 
-            <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[10px] font-bold">
-              <button
-                onClick={() => setSelectedRarity('all')}
-                className={`px-3 py-1 rounded-full shrink-0 border transition-all ${
-                  selectedRarity === 'all'
-                    ? isLight
-                      ? 'bg-slate-900 text-white border-slate-900 font-black'
-                      : 'bg-white text-slate-900 border-white font-black'
-                    : isLight
-                    ? 'bg-white text-slate-600 border-slate-200'
-                    : 'bg-slate-900 text-slate-400 border-slate-800'
-                }`}
-              >
-                All
-              </button>
-              {(Object.keys(RARITY_CONFIG) as Rarity[]).map(r => {
-                const meta = RARITY_CONFIG[r];
-                const isSelected = selectedRarity === r;
-                return (
-                  <button
-                    key={r}
-                    onClick={() => setSelectedRarity(r)}
-                    className={`px-3 py-1 rounded-full shrink-0 border transition-all font-mono ${
-                      isSelected
-                        ? 'border-white text-white font-black shadow-sm'
-                        : isLight
-                        ? 'bg-white text-slate-600 border-slate-200'
-                        : 'bg-slate-900 text-slate-400 border-slate-800'
-                    }`}
-                    style={{
-                      backgroundColor: isSelected ? meta.color : undefined,
-                      borderColor: isSelected ? meta.color : undefined,
-                    }}
-                  >
-                    {meta.name}
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-[11px] font-bold">
+              {(['all', 'common', 'uncommon', 'rare', 'epic', 'legendary'] as (Rarity | 'all')[]).map(r => (
+                <button
+                  key={r}
+                  onClick={() => {
+                    soundManager.playClick();
+                    setSelectedRarity(r);
+                  }}
+                  className={`px-3 py-1 rounded-xl whitespace-nowrap transition-all border ${
+                    selectedRarity === r
+                      ? 'bg-pink-500 text-white border-pink-500 shadow-xs'
+                      : isLight
+                      ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {r === 'all' ? 'Alle Seltenheiten' : r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Skins Grid */}
-          <div className="grid grid-cols-2 gap-2.5">
+          {/* Katzen-Karten */}
+          <div className="grid grid-cols-2 gap-3">
             {filteredCats.map(cat => {
               const isOwned = !!player.ownedCats[cat.id];
               const rarityMeta = RARITY_CONFIG[cat.rarity];
               const canAfford = player.coins >= cat.price;
-              const isPureGold = cat.specialTrait === 'pure-gold';
 
               return (
                 <div
                   key={cat.id}
-                  className={`rounded-3xl p-3 flex flex-col items-center justify-between text-center shadow-lg relative group border transition-all ${
-                    isPureGold
-                      ? 'border-amber-400 ring-2 ring-amber-400/50 bg-gradient-to-b from-amber-100/50 via-yellow-50 to-white'
-                      : isLight
-                      ? 'bg-white border-slate-200 hover:border-slate-300'
-                      : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                  className={`rounded-2xl p-3 flex flex-col items-center text-center border relative transition-all ${
+                    isLight
+                      ? 'bg-white border-slate-200 shadow-xs hover:shadow-md'
+                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  {isPureGold && (
-                    <span className="absolute -top-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[8px] uppercase px-2.5 py-0.5 rounded-full shadow-md flex items-center gap-0.5 tracking-wider">
-                      <Crown className="w-2.5 h-2.5" />
-                      <span>Pure Solid Gold</span>
-                    </span>
-                  )}
-
                   {isOwned && (
-                    <span className={`absolute top-2.5 right-2.5 border text-emerald-600 text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                      isLight ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-800 border-slate-700'
-                    }`}>
-                      Owned ({player.ownedCats[cat.id].count}x)
+                    <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                      <Check className="w-2.5 h-2.5" /> Im Besitz
                     </span>
                   )}
 
@@ -316,7 +283,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
                     </span>
 
                     <div className="text-[10px] text-slate-400 font-mono mt-1">
-                      ★ {cat.collectorValue} Rating
+                      ★ {cat.collectorValue} Wertung
                     </div>
 
                     <button
@@ -333,7 +300,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
                       }`}
                     >
                       <Coins className="w-3.5 h-3.5 text-amber-300" />
-                      <span>{cat.price.toLocaleString('en-US')}</span>
+                      <span>{cat.price.toLocaleString('de-DE')} 🪙</span>
                     </button>
                   </div>
                 </div>
@@ -343,13 +310,13 @@ export const ShopView: React.FC<ShopViewProps> = ({
         </div>
       )}
 
-      {/* --- TAB 2: KEYS CATALOG & PURCHASE --- */}
+      {/* --- TAB 2: SCHLÜSSEL KATALOG --- */}
       {activeTab === 'keys' && (
         <div className="space-y-3">
           <div className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
             isLight ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-950/30 border-amber-700/50 text-amber-200'
           }`}>
-            <span>Buy keys directly with coins to open chests anytime!</span>
+            <span>Kaufe Schlüssel mit Münzen, um jederzeit Kisten zu öffnen!</span>
             <button
               onClick={() => {
                 soundManager.playClick();
@@ -357,7 +324,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
               }}
               className="py-1 px-2.5 bg-amber-500 text-white font-bold rounded-xl text-[10px] shadow-xs shrink-0"
             >
-              Bulk Shop
+              Schnelltausch
             </button>
           </div>
 
@@ -388,14 +355,14 @@ export const ShopView: React.FC<ShopViewProps> = ({
                       <div className="flex items-center gap-2">
                         <h3 className={`font-black text-sm truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{rate.name}</h3>
                         <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.2 rounded-full font-bold">
-                          Stock: {owned}x
+                          Vorrat: {owned}x
                         </span>
                       </div>
                       <p className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                         {rate.description}
                       </p>
                       <div className="text-xs font-mono font-black text-amber-500 mt-1">
-                        {rate.coinPrice.toLocaleString('en-US')} Coins each
+                        {rate.coinPrice.toLocaleString('de-DE')} Münzen pro Stück
                       </div>
                     </div>
                   </div>
@@ -406,14 +373,14 @@ export const ShopView: React.FC<ShopViewProps> = ({
                       disabled={!canAffordSingle || isProcessing}
                       className={`py-2 px-3 rounded-xl text-xs font-black flex items-center gap-1 transition-all ${
                         canAffordSingle
-                          ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm active:scale-95'
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs active:scale-95'
                           : isLight
                           ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
                       <Coins className="w-3 h-3" />
-                      <span>Buy 1x</span>
+                      <span>1x kaufen</span>
                     </button>
 
                     <button
@@ -426,9 +393,9 @@ export const ShopView: React.FC<ShopViewProps> = ({
                           ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
-                      title={`Buy 5 keys for ${(rate.coinPrice * 5).toLocaleString('en-US')} Coins`}
+                      title={`5 Schlüssel für ${(rate.coinPrice * 5).toLocaleString('de-DE')} Münzen`}
                     >
-                      <span>Buy 5x</span>
+                      <span>5x kaufen</span>
                     </button>
                   </div>
                 </div>
@@ -438,7 +405,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
         </div>
       )}
 
-      {/* Purchase Confirmation Modal */}
+      {/* Kauf-Bestätigungsdialog */}
       {selectedCatToBuy && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 text-center space-y-4 border ${
@@ -446,7 +413,7 @@ export const ShopView: React.FC<ShopViewProps> = ({
               ? 'bg-white border-amber-300 text-slate-800'
               : 'bg-gradient-to-b from-slate-900 to-slate-950 border-amber-500/40 text-white'
           }`}>
-            <h3 className={`text-lg font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Confirm Purchase</h3>
+            <h3 className={`text-lg font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Kauf bestätigen</h3>
 
             <div className="flex justify-center -my-2">
               <CatIllustration
@@ -458,12 +425,12 @@ export const ShopView: React.FC<ShopViewProps> = ({
 
             <div>
               <div className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                {player.ownedCats[selectedCatToBuy.id] ? selectedCatToBuy.name : 'Mystery Skin (Locked)'}
+                {player.ownedCats[selectedCatToBuy.id] ? selectedCatToBuy.name : 'Mysterium Katze (Gesperrt)'}
               </div>
               <p className={`text-xs mt-1 italic ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
                 {player.ownedCats[selectedCatToBuy.id]
                   ? `"${selectedCatToBuy.description}"`
-                  : '🔒 Purchasing this cat will permanently unlock and reveal its hidden pixel-blurred artwork!'}
+                  : '🔒 Beim Kauf wird das verpixelte Bild dauerhaft enthüllt und deiner Sammlung hinzugefügt!'}
               </p>
             </div>
 
@@ -471,18 +438,18 @@ export const ShopView: React.FC<ShopViewProps> = ({
               isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700'
             }`}>
               <div className="flex justify-between">
-                <span className="text-slate-400">Price:</span>
-                <span className="font-mono font-bold text-amber-500">{selectedCatToBuy.price.toLocaleString('en-US')} Coins</span>
+                <span className="text-slate-400">Preis:</span>
+                <span className="font-mono font-bold text-amber-500">{selectedCatToBuy.price.toLocaleString('de-DE')} Münzen</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Balance after purchase:</span>
+                <span className="text-slate-400">Guthaben nach dem Kauf:</span>
                 <span className={`font-mono font-bold ${isLight ? 'text-slate-700' : 'text-slate-200'}`}>
-                  {(player.coins - selectedCatToBuy.price).toLocaleString('en-US')} Coins
+                  {(player.coins - selectedCatToBuy.price).toLocaleString('de-DE')} Münzen
                 </span>
               </div>
               {player.ownedCats[selectedCatToBuy.id] && (
                 <div className="text-[10px] text-amber-600 pt-1 border-t border-slate-200 font-bold">
-                  You already own this skin. As a duplicate you will receive +{getDuplicateCoinBonus(selectedCatToBuy)} Bonus Coins!
+                  Du besitzt diesen Skin bereits. Als Duplikat erhältst du +{getDuplicateCoinBonus(selectedCatToBuy)} Bonus-Münzen!
                 </div>
               )}
             </div>
@@ -494,14 +461,14 @@ export const ShopView: React.FC<ShopViewProps> = ({
                   isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                 }`}
               >
-                Cancel
+                Abbrechen
               </button>
               <button
                 onClick={() => handlePurchaseCat(selectedCatToBuy)}
                 disabled={isProcessing}
                 className="py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 font-black text-xs text-white shadow-md active:scale-95"
               >
-                {isProcessing ? 'Processing...' : 'Buy Now'}
+                {isProcessing ? 'Wird gekauft...' : 'Jetzt kaufen'}
               </button>
             </div>
           </div>

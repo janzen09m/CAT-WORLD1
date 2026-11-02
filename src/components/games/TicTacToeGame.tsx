@@ -16,7 +16,7 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 export const TicTacToeGame: React.FC<TicTacToeProps> = ({
   onBack,
   onGameComplete,
-  theme = 'dark',
+  theme = 'light',
 }) => {
   const [board, setBoard] = useState<SquareValue[]>(Array(9).fill(null));
   const [isPlayerTurn, setIsPlayerTurn] = useState<boolean>(true);
@@ -53,7 +53,6 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
     return { winner: null, line: null };
   };
 
-  // Bot AI logic
   const getBotMove = (squares: SquareValue[], diff: Difficulty): number => {
     const emptyIndices = squares.map((val, idx) => (val === null ? idx : null)).filter((v): v is number => v !== null);
     if (emptyIndices.length === 0) return -1;
@@ -70,51 +69,50 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
       if (checkWinner(copy).winner === 'B') return idx;
     }
 
-    // Medium or Hard: Block player if player can win
+    // Block player win
     for (const idx of emptyIndices) {
       const copy = [...squares];
       copy[idx] = 'P';
       if (checkWinner(copy).winner === 'P') return idx;
     }
 
-    // If hard, take center if available
-    if (diff === 'hard' && squares[4] === null) {
-      return 4;
+    if (diff === 'hard') {
+      if (squares[4] === null) return 4;
+      const corners = [0, 2, 6, 8].filter(i => squares[i] === null);
+      if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)];
     }
 
-    // Otherwise random from corners or edges
     return emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
   };
 
-  const handleSquareClick = (index: number) => {
-    if (!isPlayerTurn || board[index] !== null || winner || isSubmitting) return;
+  const handleSquareClick = async (index: number) => {
+    if (board[index] || !isPlayerTurn || winner || isSubmitting) return;
 
-    soundManager.playClick();
+    soundManager.playPop();
     triggerHaptic('light');
 
-    const newBoard = [...board];
-    newBoard[index] = 'P';
-    setBoard(newBoard);
+    const nextBoard = [...board];
+    nextBoard[index] = 'P';
+    setBoard(nextBoard);
 
-    const winResult = checkWinner(newBoard);
-    if (winResult.winner) {
-      finishGame(winResult.winner, winResult.line);
+    const res = checkWinner(nextBoard);
+    if (res.winner) {
+      handleGameOver(res.winner, res.line);
       return;
     }
 
     // Bot's Turn
     setIsPlayerTurn(false);
     setTimeout(() => {
-      const botIdx = getBotMove(newBoard, difficulty);
+      const botIdx = getBotMove(nextBoard, difficulty);
       if (botIdx !== -1) {
-        soundManager.playClick();
-        const botBoard = [...newBoard];
-        botBoard[botIdx] = 'B';
-        setBoard(botBoard);
+        nextBoard[botIdx] = 'B';
+        setBoard([...nextBoard]);
+        soundManager.playPop();
 
-        const botWinResult = checkWinner(botBoard);
-        if (botWinResult.winner) {
-          finishGame(botWinResult.winner, botWinResult.line);
+        const botRes = checkWinner(nextBoard);
+        if (botRes.winner) {
+          handleGameOver(botRes.winner, botRes.line);
         } else {
           setIsPlayerTurn(true);
         }
@@ -122,18 +120,15 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
     }, 450);
   };
 
-  const finishGame = async (gameWinner: SquareValue | 'draw', line: number[] | null) => {
+  const handleGameOver = async (gameWinner: SquareValue | 'draw', line: number[] | null) => {
     setWinner(gameWinner);
     setWinningLine(line);
     setIsSubmitting(true);
 
-    let outcome: 'win' | 'draw' | 'loss' = 'draw';
     if (gameWinner === 'P') {
-      outcome = 'win';
       soundManager.playWinFanfare();
       triggerHaptic('success');
     } else if (gameWinner === 'B') {
-      outcome = 'loss';
       soundManager.playError();
       triggerHaptic('warning');
     } else {
@@ -141,13 +136,10 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
     }
 
     try {
-      const res = await onGameComplete(outcome);
-      if (outcome === 'win') {
-        setRewardMsg(`Victory! Earned +${res.coinsEarned} Coins! 🏆`);
-      } else if (outcome === 'draw') {
-        setRewardMsg(`Draw! +${res.coinsEarned} Coins 🤝`);
-      } else {
-        setRewardMsg(`Defeat. +${res.coinsEarned} Consolation Coins 🐾`);
+      const outcome = gameWinner === 'P' ? 'win' : gameWinner === 'B' ? 'loss' : 'draw';
+      const result = await onGameComplete(outcome);
+      if (result?.coinsEarned) {
+        setRewardMsg(`+${result.coinsEarned} Münzen verdient! 🪙`);
       }
     } catch {
       // ignore
@@ -167,39 +159,33 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
 
   return (
     <div className="space-y-4 max-w-sm mx-auto select-none">
-      {/* Top Header */}
+      {/* Header bar */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => {
-            soundManager.playClick();
-            onBack();
-          }}
-          className={`p-2 rounded-xl flex items-center gap-1 text-xs font-bold border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          onClick={onBack}
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
         </button>
 
-        <h3 className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>Tic-Tac-Toe</h3>
+        <h3 className={`font-black text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>
+          Tic-Tac-Toe Pfoten
+        </h3>
 
         <button
           onClick={resetGame}
-          className={`p-2 rounded-xl border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
-          title="Restart"
+          title="Neu starten"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Difficulty Switcher */}
+      {/* Schwierigkeitsgrad */}
       <div className={`p-1 rounded-xl flex items-center justify-between text-xs font-bold border ${
         isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-800/80 border-slate-700/60'
       }`}>
@@ -210,29 +196,29 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
               setDifficulty(d);
               resetGame();
             }}
-            className={`flex-1 py-1.5 rounded-lg transition-colors capitalize ${
+            className={`flex-1 py-1.5 rounded-lg transition-colors capitalize text-xs ${
               difficulty === d
                 ? 'bg-pink-600 text-white shadow-xs'
                 : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
             }`}
           >
-            {d === 'easy' ? 'Easy' : d === 'medium' ? 'Medium' : 'Master'}
+            {d === 'easy' ? 'Leicht' : d === 'medium' ? 'Mittel' : 'Meister'}
           </button>
         ))}
       </div>
 
-      {/* Turn indicator */}
+      {/* Zug-Anzeige */}
       <div className="text-center text-xs font-bold py-1">
         {winner ? (
-          <span className="text-pink-500 font-black">Game Finished</span>
+          <span className="text-pink-500 font-black">Runde beendet</span>
         ) : isPlayerTurn ? (
-          <span className="text-emerald-500">Your Turn (Paw 🐾)</span>
+          <span className="text-emerald-500">Du bist am Zug (Pfote 🐾)</span>
         ) : (
-          <span className="text-blue-500 animate-pulse">Cat AI Thinking (Fish 🐟)...</span>
+          <span className="text-blue-500 animate-pulse">Katzen-KI überlegt (Fisch 🐟)...</span>
         )}
       </div>
 
-      {/* 3x3 Board */}
+      {/* 3x3 Spielfeld */}
       <div className={`grid grid-cols-3 gap-2.5 p-3 rounded-2xl shadow-xl border ${
         isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-700/80'
       }`}>
@@ -257,7 +243,7 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
         })}
       </div>
 
-      {/* Result Message & Replay Button */}
+      {/* Ergebnis-Nachricht */}
       {winner && (
         <div className={`rounded-2xl p-4 text-center space-y-3 animate-in fade-in duration-200 border ${
           isLight ? 'bg-white border-purple-200 shadow-md text-slate-800' : 'bg-slate-800/95 border-purple-500/30 text-white'
@@ -267,10 +253,10 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
           </div>
           <div className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>
             {winner === 'P'
-              ? 'Congratulations! You Won!'
+              ? 'Glückwunsch! Du hast gewonnen!'
               : winner === 'draw'
-              ? 'It’s a Draw!'
-              : 'Cat AI Won this round!'}
+              ? 'Unentschieden!'
+              : 'Katzen-KI hat diese Runde gewonnen!'}
           </div>
           {rewardMsg && (
             <div className={`text-xs font-bold p-2 rounded-xl border ${
@@ -283,7 +269,7 @@ export const TicTacToeGame: React.FC<TicTacToeProps> = ({
             onClick={resetGame}
             className="w-full py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 font-bold text-xs rounded-xl text-white shadow-lg transition-all"
           >
-            Play Again
+            Noch eine Runde spielen
           </button>
         </div>
       )}

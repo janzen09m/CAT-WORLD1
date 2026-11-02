@@ -64,7 +64,7 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
       setAmount(1);
     } catch (err: any) {
       soundManager.playError();
-      setErrorMsg(err.message || 'Key purchase failed');
+      setErrorMsg(err.message || 'Schlüsselkauf fehlgeschlagen');
     } finally {
       setIsSubmitting(false);
     }
@@ -96,16 +96,16 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
           <div className="inline-flex p-2.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-500 mb-1">
             <Key className="w-6 h-6 animate-bounce" />
           </div>
-          <h2 className={`text-xl font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Buy Chest Keys</h2>
+          <h2 className={`text-xl font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Kistenschlüssel kaufen</h2>
           <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
-            Spend coins to unlock treasure chests and get rare cats!
+            Tausche Münzen ein, um Schatztruhen zu öffnen und seltene Katzen zu ziehen!
           </p>
 
           <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono border mt-1 ${
             isLight ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-950/40 border-amber-700/50 text-amber-300'
           }`}>
             <Coins className="w-3.5 h-3.5 text-amber-500" />
-            <span>Balance: {player.coins.toLocaleString('en-US')} Coins</span>
+            <span>Guthaben: {player.coins.toLocaleString('de-DE')} Münzen</span>
           </div>
         </div>
 
@@ -113,7 +113,7 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
         {successInfo && (
           <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-center text-xs text-emerald-800 flex items-center justify-center gap-2 animate-in fade-in">
             <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Purchased <strong>{successInfo.amount}x {successInfo.keyName}</strong> for <strong>{successInfo.totalCost.toLocaleString('en-US')} Coins</strong>! 🗝️</span>
+            <span><strong>{successInfo.amount}x {successInfo.keyName}</strong> für <strong>{successInfo.totalCost.toLocaleString('de-DE')} Münzen</strong> gekauft! 🗝️</span>
           </div>
         )}
 
@@ -153,13 +153,13 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
               >
                 <span className="text-xl my-0.5">🗝️</span>
                 <span className={`text-[10px] font-black truncate w-full ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {kRate.name.replace(' Key', '')}
+                  {kRate.name.replace(' Key', '').replace(' Schlüssel', '')}
                 </span>
                 <span className="text-[9px] font-mono text-amber-500 font-bold mt-0.5">
                   {kRate.coinPrice}🪙
                 </span>
                 <span className={`text-[8px] font-mono mt-0.5 ${isLight ? 'text-slate-400' : 'text-slate-400'}`}>
-                  x{stock}
+                  {stock}x
                 </span>
               </button>
             );
@@ -172,20 +172,20 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
         }`}>
           <div className="flex items-center justify-between font-bold">
             <span className={isLight ? 'text-slate-900' : 'text-white'}>{rate.name}</span>
-            <span className="text-amber-500 font-mono">{rate.coinPrice} Coins each</span>
+            <span className="text-amber-500 font-mono">{rate.coinPrice} Münzen / Stück</span>
           </div>
           <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             {rate.description}
           </p>
           <div className={`text-[10px] font-mono pt-1 border-t ${isLight ? 'border-slate-200 text-slate-500' : 'border-slate-700 text-slate-400'}`}>
-            Current Inventory: <strong>{currentKeyStock}x in stock</strong>
+            Aktueller Vorrat: <strong>{currentKeyStock}x im Inventar</strong>
           </div>
         </div>
 
         {/* Quantity Selectors */}
         <div className="space-y-1.5 mb-4">
           <label className={`text-xs font-bold block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-            Select Quantity:
+            Menge wählen:
           </label>
           <div className="flex items-center gap-2">
             <div className={`flex items-center rounded-xl border p-1 shrink-0 ${
@@ -242,9 +242,9 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
         {/* Total Cost & Buy CTA */}
         <div className="pt-2">
           <div className="flex items-center justify-between text-xs mb-2">
-            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Total Price:</span>
+            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Gesamtpreis:</span>
             <span className={`font-mono font-black text-sm ${canAfford ? 'text-amber-500' : 'text-rose-500'}`}>
-              {totalCost.toLocaleString('en-US')} Coins
+              {totalCost.toLocaleString('de-DE')} Münzen
             </span>
           </div>
 
@@ -260,10 +260,10 @@ export const ConvertKeysModal: React.FC<BuyKeysModalProps> = ({
             <ShoppingCart className="w-4 h-4" />
             <span>
               {isSubmitting
-                ? 'Purchasing...'
+                ? 'Wird gekauft...'
                 : canAfford
-                ? `Buy ${amount}x ${rate.name} (${totalCost.toLocaleString('en-US')} Coins)`
-                : `Need ${(totalCost - player.coins).toLocaleString('en-US')} More Coins`}
+                ? `${amount}x ${rate.name} kaufen (${totalCost.toLocaleString('de-DE')} Münzen)`
+                : `Noch ${(totalCost - player.coins).toLocaleString('de-DE')} Münzen benötigt`}
             </span>
           </button>
         </div>

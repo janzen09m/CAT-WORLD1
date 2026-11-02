@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { soundManager } from '../../utils/audio';
 import { triggerHaptic } from '../../utils/telegram';
-import { ArrowLeft, Play, Pause, RefreshCw, Trophy } from 'lucide-react';
+import { ArrowLeft, Play, RefreshCw, Trophy } from 'lucide-react';
 import { Theme } from '../../types/game';
 
 interface TennisGameProps {
@@ -13,7 +13,7 @@ interface TennisGameProps {
 export const TennisGame: React.FC<TennisGameProps> = ({
   onBack,
   onGameComplete,
-  theme = 'dark',
+  theme = 'light',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -104,73 +104,56 @@ export const TennisGame: React.FC<TennisGameProps> = ({
       p.ballX += p.ballSpeedX;
       p.ballY += p.ballSpeedY;
 
-      // 3. Wall collisions (Left & Right)
+      // Wall bounce
       if (p.ballX - p.ballRadius <= 0) {
         p.ballX = p.ballRadius;
         p.ballSpeedX = Math.abs(p.ballSpeedX);
-        soundManager.playTennisHit();
+        soundManager.playPop();
       } else if (p.ballX + p.ballRadius >= p.canvasWidth) {
         p.ballX = p.canvasWidth - p.ballRadius;
         p.ballSpeedX = -Math.abs(p.ballSpeedX);
-        soundManager.playTennisHit();
+        soundManager.playPop();
       }
 
-      // 4. Paddle collisions
-      // Player paddle (bottom)
-      const playerY = p.canvasHeight - 35;
+      // Paddle AI bounce (Top paddle)
+      const aiPaddleY = 24;
       if (
-        p.ballY + p.ballRadius >= playerY &&
-        p.ballY - p.ballRadius <= playerY + p.paddleHeight &&
-        p.ballX >= p.playerX &&
-        p.ballX <= p.playerX + p.playerWidth &&
-        p.ballSpeedY > 0
-      ) {
-        const hitOffset = (p.ballX - (p.playerX + p.playerWidth / 2)) / (p.playerWidth / 2);
-        p.ballSpeedX = hitOffset * 5.5;
-        p.ballSpeedY = -Math.abs(p.ballSpeedY) * 1.05;
-        p.rally += 1;
-        setRallyCount(p.rally);
-        soundManager.playTennisHit();
-        triggerHaptic('light');
-      }
-
-      // AI paddle (top)
-      const aiY = 25;
-      if (
-        p.ballY - p.ballRadius <= aiY + p.paddleHeight &&
-        p.ballY + p.ballRadius >= aiY &&
+        p.ballY - p.ballRadius <= aiPaddleY + p.paddleHeight &&
+        p.ballY - p.ballRadius >= aiPaddleY &&
         p.ballX >= p.aiX &&
         p.ballX <= p.aiX + p.aiWidth &&
         p.ballSpeedY < 0
       ) {
+        p.ballSpeedY = Math.abs(p.ballSpeedY) * 1.05; // speed up slightly
         const hitOffset = (p.ballX - (p.aiX + p.aiWidth / 2)) / (p.aiWidth / 2);
-        p.ballSpeedX = hitOffset * 5;
-        p.ballSpeedY = Math.abs(p.ballSpeedY) * 1.05;
-        p.rally += 1;
+        p.ballSpeedX = hitOffset * 4.5;
+        p.rally++;
         setRallyCount(p.rally);
-        soundManager.playTennisHit();
+        soundManager.playPop();
+        triggerHaptic('light');
       }
 
-      // Goal Bottom (AI scores point)
-      if (p.ballY > p.canvasHeight + 10) {
-        localAiScore += 1;
-        setAiScore(localAiScore);
-        p.rally = 0;
-        setRallyCount(0);
-        soundManager.playError();
-        triggerHaptic('warning');
-
-        if (localAiScore >= p.targetScore) {
-          endGame('ai', localPlayerScore);
-          return;
-        } else {
-          resetBall('up');
-        }
+      // Paddle Player bounce (Bottom paddle)
+      const playerPaddleY = p.canvasHeight - 24 - p.paddleHeight;
+      if (
+        p.ballY + p.ballRadius >= playerPaddleY &&
+        p.ballY + p.ballRadius <= playerPaddleY + p.paddleHeight &&
+        p.ballX >= p.playerX &&
+        p.ballX <= p.playerX + p.playerWidth &&
+        p.ballSpeedY > 0
+      ) {
+        p.ballSpeedY = -Math.abs(p.ballSpeedY) * 1.05;
+        const hitOffset = (p.ballX - (p.playerX + p.playerWidth / 2)) / (p.playerWidth / 2);
+        p.ballSpeedX = hitOffset * 5;
+        p.rally++;
+        setRallyCount(p.rally);
+        soundManager.playPop();
+        triggerHaptic('medium');
       }
 
-      // Goal Top (Player scores point)
-      if (p.ballY < -10) {
-        localPlayerScore += 1;
+      // Check Scored: Player scores (Ball goes past top)
+      if (p.ballY - p.ballRadius <= 0) {
+        localPlayerScore++;
         setPlayerScore(localPlayerScore);
         p.rally = 0;
         setRallyCount(0);
@@ -185,44 +168,25 @@ export const TennisGame: React.FC<TennisGameProps> = ({
         }
       }
 
-      // --- RENDER SCENE ---
-      // Clear Court
-      ctx.fillStyle = '#064E3B'; // Tennis Green Court
-      ctx.fillRect(0, 0, p.canvasWidth, p.canvasHeight);
+      // AI scores (Ball goes past bottom)
+      if (p.ballY + p.ballRadius >= p.canvasHeight) {
+        localAiScore++;
+        setAiScore(localAiScore);
+        p.rally = 0;
+        setRallyCount(0);
+        soundManager.playError();
+        triggerHaptic('warning');
 
-      // Court Lines
-      ctx.strokeStyle = '#34D399';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(16, 16, p.canvasWidth - 32, p.canvasHeight - 32);
+        if (localAiScore >= p.targetScore) {
+          endGame('ai', localPlayerScore);
+          return;
+        } else {
+          resetBall('up');
+        }
+      }
 
-      // Net Center Line
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      ctx.moveTo(16, p.canvasHeight / 2);
-      ctx.lineTo(p.canvasWidth - 16, p.canvasHeight / 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // AI Paddle (Top)
-      ctx.fillStyle = '#F43F5E';
-      ctx.beginPath();
-      ctx.roundRect(p.aiX, aiY, p.aiWidth, p.paddleHeight, 6);
-      ctx.fill();
-
-      // Player Paddle (Bottom)
-      ctx.fillStyle = '#38BDF8';
-      ctx.beginPath();
-      ctx.roundRect(p.playerX, playerY, p.playerWidth, p.paddleHeight, 6);
-      ctx.fill();
-
-      // Tennis Ball (Neon Yellow with fuzz circle)
-      ctx.fillStyle = '#FACC15';
-      ctx.beginPath();
-      ctx.arc(p.ballX, p.ballY, p.ballRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#EAB308';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      // Draw Everything
+      drawCourt(ctx, p);
 
       animFrameId.current = requestAnimationFrame(gameLoop);
     };
@@ -235,78 +199,127 @@ export const TennisGame: React.FC<TennisGameProps> = ({
   }, [gameState]);
 
   const endGame = async (winner: 'player' | 'ai', finalScore: number) => {
-    setMatchWinner(winner);
     setGameState('gameover');
+    setMatchWinner(winner);
 
-    const outcome = winner === 'player' ? 'win' : 'loss';
     if (winner === 'player') {
       soundManager.playWinFanfare();
       triggerHaptic('success');
     } else {
       soundManager.playError();
-      triggerHaptic('warning');
     }
 
     try {
-      const res = await onGameComplete(outcome, finalScore);
-      setRewardMsg(
-        winner === 'player'
-          ? `Match Victory! Earned +${res.coinsEarned} Coins! 🎾`
-          : `Match Lost. +${res.coinsEarned} Consolation Coins 🎾`
-      );
+      const res = await onGameComplete(winner === 'player' ? 'win' : 'loss', finalScore);
+      if (res?.coinsEarned) {
+        setRewardMsg(`+${res.coinsEarned} Münzen verdient! 🪙`);
+      }
     } catch {
       // ignore
     }
   };
 
+  const drawCourt = (ctx: CanvasRenderingContext2D, p: typeof physicsRef.current) => {
+    // Background Court
+    ctx.fillStyle = '#064e3b';
+    ctx.fillRect(0, 0, p.canvasWidth, p.canvasHeight);
+
+    // Court Lines
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, p.canvasWidth - 24, p.canvasHeight - 24);
+
+    // Center Net Line
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(12, p.canvasHeight / 2);
+    ctx.lineTo(p.canvasWidth - 12, p.canvasHeight / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // AI Paddle (Cat face icon representation)
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.roundRect(p.aiX, 24, p.aiWidth, p.paddleHeight, 6);
+    ctx.fill();
+
+    // AI Cat Ears
+    ctx.fillStyle = '#b91c1c';
+    ctx.beginPath();
+    ctx.moveTo(p.aiX + 8, 24);
+    ctx.lineTo(p.aiX + 16, 14);
+    ctx.lineTo(p.aiX + 24, 24);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(p.aiX + p.aiWidth - 24, 24);
+    ctx.lineTo(p.aiX + p.aiWidth - 16, 14);
+    ctx.lineTo(p.aiX + p.aiWidth - 8, 24);
+    ctx.fill();
+
+    // Player Paddle
+    const playerPaddleY = p.canvasHeight - 24 - p.paddleHeight;
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath();
+    ctx.roundRect(p.playerX, playerPaddleY, p.playerWidth, p.paddleHeight, 6);
+    ctx.fill();
+
+    // Player Cat Ears
+    ctx.fillStyle = '#0369a1';
+    ctx.beginPath();
+    ctx.moveTo(p.playerX + 8, playerPaddleY + p.paddleHeight);
+    ctx.lineTo(p.playerX + 16, playerPaddleY + p.paddleHeight + 10);
+    ctx.lineTo(p.playerX + 24, playerPaddleY + p.paddleHeight);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(p.playerX + p.playerWidth - 24, playerPaddleY + p.paddleHeight);
+    ctx.lineTo(p.playerX + p.playerWidth - 16, playerPaddleY + p.paddleHeight + 10);
+    ctx.lineTo(p.playerX + p.playerWidth - 8, playerPaddleY + p.paddleHeight);
+    ctx.fill();
+
+    // Tennis Ball (Neon Yellow Cat Yarn)
+    ctx.fillStyle = '#facc15';
+    ctx.shadowColor = '#fef08a';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(p.ballX, p.ballY, p.ballRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  };
+
   return (
-    <div className="space-y-4 max-w-sm mx-auto select-none">
-      {/* Top Header */}
+    <div className="space-y-3 max-w-sm mx-auto select-none">
+      {/* Header Bar */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => {
-            soundManager.playClick();
-            onBack();
-          }}
-          className={`p-2 rounded-xl flex items-center gap-1 text-xs font-bold border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          onClick={onBack}
+          className={`p-2 rounded-xl transition-colors ${
+            isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
           }`}
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
         </button>
 
-        <h3 className={`font-black text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>Cat Tennis</h3>
+        <h3 className={`font-black text-sm ${isLight ? 'text-slate-800' : 'text-white'}`}>
+          Katzen-Tennis Arcade
+        </h3>
 
-        <button
-          onClick={startGame}
-          className={`p-2 rounded-xl border transition-colors ${
-            isLight
-              ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
-          }`}
-          title="Restart"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="w-8" />
       </div>
 
-      {/* Scoreboard */}
-      <div className={`rounded-2xl p-2.5 flex items-center justify-around text-center border ${
-        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-800/90 border-slate-700/80'
+      {/* Score HUD */}
+      <div className={`p-2.5 rounded-2xl flex items-center justify-around text-center border ${
+        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/90 border-slate-800'
       }`}>
         <div>
-          <span className="text-[10px] text-rose-500 font-bold block">AI Cat (Red)</span>
+          <span className="text-[10px] text-rose-500 font-bold block">Katzen-KI (Rot)</span>
           <span className={`text-2xl font-black font-mono ${isLight ? 'text-slate-800' : 'text-white'}`}>{aiScore}</span>
         </div>
         <div className={`px-3 border-x ${isLight ? 'border-slate-200' : 'border-slate-700'}`}>
-          <span className="text-[10px] text-amber-500 font-bold block">Rallies</span>
+          <span className="text-[10px] text-amber-500 font-bold block">Ballwechsel</span>
           <span className={`text-sm font-bold font-mono ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>{rallyCount}</span>
         </div>
         <div>
-          <span className="text-[10px] text-sky-500 font-bold block">You (Blue)</span>
+          <span className="text-[10px] text-sky-500 font-bold block">Du (Blau)</span>
           <span className={`text-2xl font-black font-mono ${isLight ? 'text-slate-800' : 'text-white'}`}>{playerScore}</span>
         </div>
       </div>
@@ -331,20 +344,20 @@ export const TennisGame: React.FC<TennisGameProps> = ({
           }}
         />
 
-        {/* Ready Overlay */}
+        {/* Start Overlay */}
         {gameState === 'ready' && (
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center">
             <div className="text-5xl mb-2">🎾</div>
-            <h4 className="text-xl font-black text-white">Cat Tennis</h4>
+            <h4 className="text-xl font-black text-white">Katzen-Tennis</h4>
             <p className="text-xs text-slate-300 mt-1 max-w-[220px]">
-              Drag your paddle left and right with your finger. First to reach 3 points wins!
+              Bewege deinen Schläger mit dem Finger nach links und rechts. Wer zuerst 3 Punkte hat, gewinnt!
             </p>
             <button
               onClick={startGame}
-              className="mt-5 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/25 flex items-center gap-2"
+              className="mt-5 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/25 flex items-center gap-2 text-xs"
             >
               <Play className="w-4 h-4 fill-white" />
-              <span>Start Match</span>
+              <span>Match starten</span>
             </button>
           </div>
         )}
@@ -356,10 +369,10 @@ export const TennisGame: React.FC<TennisGameProps> = ({
               {matchWinner === 'player' ? '🏆' : '😿'}
             </div>
             <h4 className="text-xl font-black text-white">
-              {matchWinner === 'player' ? 'Match Victory!' : 'Match Defeat!'}
+              {matchWinner === 'player' ? 'Match-Sieg!' : 'Match-Niederlage!'}
             </h4>
             <p className="text-sm font-bold text-slate-300 font-mono mt-1">
-              Final Score: {playerScore} - {aiScore}
+              Endergebnis: {playerScore} - {aiScore}
             </p>
 
             {rewardMsg && (
@@ -370,16 +383,16 @@ export const TennisGame: React.FC<TennisGameProps> = ({
 
             <button
               onClick={startGame}
-              className="mt-4 py-2.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black rounded-xl shadow-lg transition-all"
+              className="mt-4 py-2.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black rounded-xl shadow-lg transition-all text-xs"
             >
-              Play Rematch
+              Revanche spielen
             </button>
           </div>
         )}
       </div>
 
       <div className={`text-center text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-        Tip: Hit the ball near the paddle edge for sharp angles!
+        Tipp: Triff den Ball am Schlägerrand für scharfe Winkel!
       </div>
     </div>
   );
