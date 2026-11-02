@@ -193,6 +193,8 @@ export function getTelegramInitData(): string {
 
 export function getTelegramUser(): {
   id?: number;
+  first_name?: string;
+  last_name?: string;
   name?: string;
   username?: string;
   isPremium?: boolean;
@@ -203,6 +205,8 @@ export function getTelegramUser(): {
   if (user) {
     return {
       id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
       name: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
       username: user.username,
       isPremium: user.is_premium,

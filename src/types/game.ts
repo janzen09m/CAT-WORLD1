@@ -159,6 +159,7 @@ export interface PlayerData {
   lastLoginDate: string;
   dailyLoginClaimedToday: boolean;
   chestHistory: ChestHistoryEntry[];
+  hasOnboarded?: boolean;
 }
 
 export interface LeaderboardEntry {

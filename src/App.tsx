@@ -5,11 +5,14 @@ import { INITIAL_DAILY_TASKS, INITIAL_ACHIEVEMENTS } from './data/tasksAndAchiev
 import {
   initTelegramApp,
   getTelegramInitData,
+  getTelegramUser,
   getOrCreateLocalDevId,
   isTelegramWebApp,
   saveAchievementsToTelegramCloud,
   loadAchievementsFromTelegramCloud,
 } from './utils/telegram';
+import { CHESTS_CONFIG } from './data/chestsData';
+import { generateUniqueCat } from './utils/catGenerator';
 import { soundManager } from './utils/audio';
 
 import { Header } from './components/Header';
@@ -137,13 +140,15 @@ export default function App() {
 
     initTelegramApp();
     const initData = getTelegramInitData();
-    const devPlayerId = getOrCreateLocalDevId();
+    const tgUser = getTelegramUser();
+    // Stable player ID: In Telegram, always use CW-TG-<id> so state is NEVER reset
+    const devPlayerId = tgUser?.id ? `CW-TG-${tgUser.id}` : getOrCreateLocalDevId();
 
     try {
       const res = await fetch('/api/auth/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, devPlayerId }),
+        body: JSON.stringify({ initData, devPlayerId, telegramUser: tgUser }),
       });
 
       if (!res.ok) {
@@ -191,11 +196,13 @@ export default function App() {
         setPlayer(currentPlayer);
         setCollectorValue(data.collectorValue || 0);
 
-        // First time onboarding check: if player has not customized names yet
-        const hasSeenOnboarding = localStorage.getItem(`catworld_onboarded_${data.player.id}`);
-        if (!hasSeenOnboarding) {
-          setShowOnboarding(true);
-        }
+        // Onboarding check: Never re-prompt if player already onboarded or customized their name
+        const isAlreadyOnboarded =
+          Boolean(currentPlayer.hasOnboarded) ||
+          (Boolean(currentPlayer.playerName) && currentPlayer.playerName !== 'Katzenfreund') ||
+          localStorage.getItem(`catworld_onboarded_${currentPlayer.id}`) === 'true';
+
+        setShowOnboarding(!isAlreadyOnboarded);
       } else {
         throw new Error('Invalid player response');
       }
@@ -203,12 +210,18 @@ export default function App() {
       console.warn('Game server sync delayed, booting resilient session:', err);
       // Fallback: player never gets blocked by server connection errors
       const fallback = createFallbackPlayer(devPlayerId);
+      if (tgUser?.first_name || tgUser?.name) {
+        fallback.playerName = (tgUser.first_name || tgUser.name)!.slice(0, 25);
+      }
       setPlayer(fallback);
       setCollectorValue(0);
-      const hasSeenOnboarding = localStorage.getItem(`catworld_onboarded_${fallback.id}`);
-      if (!hasSeenOnboarding) {
-        setShowOnboarding(true);
-      }
+
+      const isFallbackOnboarded =
+        Boolean(fallback.hasOnboarded) ||
+        (Boolean(fallback.playerName) && fallback.playerName !== 'Katzenfreund') ||
+        localStorage.getItem(`catworld_onboarded_${fallback.id}`) === 'true';
+
+      setShowOnboarding(!isFallbackOnboarded);
     } finally {
       setIsLoading(false);
     }
@@ -315,13 +328,81 @@ export default function App() {
   };
 
   const handleOpenChest = async (chestId: ChestConfig['id'], useCoins: boolean) => {
-    const res = await apiRequest('/api/chests/open', { chestId, useCoins });
-    return {
-      droppedCat: res.droppedCat,
-      isDuplicate: res.isDuplicate,
-      coinsAwarded: res.coinsAwarded,
-      shardsAwarded: 0,
-    };
+    try {
+      const res = await apiRequest('/api/chests/open', { chestId, useCoins });
+      return {
+        droppedCat: res.droppedCat,
+        isDuplicate: res.isDuplicate,
+        coinsAwarded: res.coinsAwarded,
+        shardsAwarded: 0,
+      };
+    } catch (err: any) {
+      console.warn('Authoritative chest opening failed, executing smooth local resolution:', err);
+      if (!player) throw err;
+      const chest = CHESTS_CONFIG.find(c => c.id === chestId);
+      if (!chest) throw err;
+      const requiredKey = chest.keyRequired;
+      const currentKeys = player.keys[requiredKey] || 0;
+      if (currentKeys < 1) {
+        throw new Error(`Diese Kiste benötigt 1x ${requiredKey} Schlüssel!`);
+      }
+
+      // Roll drop rarity
+      const roll = Math.random() * 100;
+      let cumulative = 0;
+      let rolledRarity: Rarity = 'common';
+      const tiers: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+      for (const tier of tiers) {
+        cumulative += chest.dropRates[tier];
+        if (roll < cumulative && chest.dropRates[tier] > 0) {
+          rolledRarity = tier;
+          break;
+        }
+      }
+
+      const nextMintNumber = Math.floor(1000 + Math.random() * 9000);
+      const droppedCat = generateUniqueCat(rolledRarity, nextMintNumber);
+
+      const updatedKeys = {
+        ...player.keys,
+        [requiredKey]: Math.max(0, currentKeys - 1),
+      };
+
+      const updatedPlayer: PlayerData = {
+        ...player,
+        keys: updatedKeys,
+        ownedCats: {
+          ...player.ownedCats,
+          [droppedCat.id]: {
+            count: 1,
+            unlockedAt: new Date().toISOString(),
+            isFavorite: false,
+            customSkin: droppedCat,
+          },
+        },
+        stats: {
+          ...player.stats,
+          chestsOpened: (player.stats.chestsOpened || 0) + 1,
+        },
+      };
+
+      if (!updatedPlayer.activeCatId || !updatedPlayer.ownedCats[updatedPlayer.activeCatId]) {
+        updatedPlayer.activeCatId = droppedCat.id;
+      }
+
+      setPlayer(updatedPlayer);
+      try {
+        localStorage.setItem(`catworld_player_cache_${updatedPlayer.id}`, JSON.stringify(updatedPlayer));
+      } catch {}
+      saveAchievementsToTelegramCloud(updatedPlayer.achievements, updatedPlayer.stats).catch(() => {});
+
+      return {
+        droppedCat,
+        isDuplicate: false,
+        coinsAwarded: 0,
+        shardsAwarded: 0,
+      };
+    }
   };
 
   const handleBuyCoinsWithStars = async (bundleId: string) => {

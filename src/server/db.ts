@@ -387,6 +387,7 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
     lastLoginDate: todayStr,
     dailyLoginClaimedToday: false,
     chestHistory: [],
+    hasOnboarded: Boolean(tgUser?.name && tgUser.name !== 'Katzenfreund'),
   };
 
   // Sync starter cat to collection achievement
@@ -408,8 +409,39 @@ export function getPlayer(id: string): PlayerData | null {
 
   // Ensure starShards is 0 and stats keysBought exists
   player.starShards = 0;
+  if (!player.stats) {
+    player.stats = {
+      gamesPlayed: 0,
+      gamesWon: 0,
+      tictactoeWins: 0,
+      tennisWins: 0,
+      chessWins: 0,
+      memoryWins: 0,
+      catCatchHighScore: 0,
+      chestsOpened: 0,
+      catsBought: 0,
+      keysBought: 0,
+      totalCoinsEarned: 500,
+      petCount: 0,
+    };
+  }
   if (player.stats.keysBought === undefined) {
     player.stats.keysBought = 0;
+  }
+  if (!player.dailyTasks || !Array.isArray(player.dailyTasks)) {
+    player.dailyTasks = JSON.parse(JSON.stringify(INITIAL_DAILY_TASKS));
+  }
+  if (!player.achievements || !Array.isArray(player.achievements)) {
+    player.achievements = JSON.parse(JSON.stringify(INITIAL_ACHIEVEMENTS));
+  }
+  if (!player.chestHistory || !Array.isArray(player.chestHistory)) {
+    player.chestHistory = [];
+  }
+  if (!player.keys) {
+    player.keys = { wooden: 2, blue: 1, epic: 0, legendary: 0 };
+  }
+  if (!player.ownedCats) {
+    player.ownedCats = {};
   }
 
   let needsSave = false;

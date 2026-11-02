@@ -13,8 +13,13 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // JSON body parser
-  app.use(express.json());
+  // JSON body parser with safety for already parsed payloads
+  app.use((req, res, next) => {
+    if (req.body && typeof req.body === 'object') {
+      return next();
+    }
+    express.json()(req, res, next);
+  });
 
   // API router
   app.use('/api', apiRouter);
@@ -45,6 +50,12 @@ async function startServer() {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
+
+  // Top-level error handler: ALWAYS return JSON
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('Unhandled server error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Interner Serverfehler' });
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🐱 CAT WORLD Server running on http://0.0.0.0:${PORT}`);

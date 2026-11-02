@@ -163,17 +163,19 @@ function verifyTelegramInitData(initData: string, botToken?: string): { verified
 
 // POST /api/auth/init
 apiRouter.post('/auth/init', (req: Request, res: Response) => {
-  const { initData, devPlayerId } = req.body;
+  const { initData, devPlayerId, telegramUser } = req.body;
   const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 
-  let tgUser: any = undefined;
+  let tgUser: any = telegramUser;
 
   if (initData) {
     const verification = verifyTelegramInitData(initData, botToken);
-    tgUser = verification.user;
+    if (verification.user) {
+      tgUser = verification.user;
+    }
   }
 
-  // Derive stable player ID
+  // Derive stable player ID for Telegram user: NEVER change across sessions
   let playerId = devPlayerId;
   if (tgUser?.id) {
     playerId = `CW-TG-${tgUser.id}`;
@@ -181,11 +183,19 @@ apiRouter.post('/auth/init', (req: Request, res: Response) => {
     playerId = `CW-GUEST-${Math.floor(100000 + Math.random() * 900000)}`;
   }
 
-  const player = getOrCreatePlayer(playerId, tgUser ? {
+  const tgName = tgUser?.first_name ? (tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : '')) : tgUser?.name;
+
+  const player = getOrCreatePlayer(playerId, tgUser?.id ? {
     id: tgUser.id,
-    name: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
+    name: tgName || 'Katzenfreund',
     username: tgUser.username,
   } : undefined);
+
+  // If player was created with telegram name, ensure playerName reflects it
+  if (tgName && (!player.playerName || player.playerName === 'Katzenfreund')) {
+    player.playerName = tgName.slice(0, 25);
+    savePlayer(player);
+  }
 
   // Generate authentic cryptographic session token
   const sessionToken = createSessionToken(player.id);
@@ -210,6 +220,7 @@ apiRouter.post('/player/update-names', (req: Request, res: Response) => {
   if (typeof catCustomName === 'string' && catCustomName.trim()) {
     player.catCustomName = catCustomName.trim().slice(0, 25);
   }
+  player.hasOnboarded = true;
 
   savePlayer(player);
   res.json({ success: true, player });
