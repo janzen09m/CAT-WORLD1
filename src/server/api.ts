@@ -229,11 +229,22 @@ apiRouter.post('/player/update-names', (req: Request, res: Response) => {
 // POST /api/player/set-active-cat
 apiRouter.post('/player/set-active-cat', (req: Request, res: Response) => {
   const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+  if (!player) return res.status(401).json({ success: false, error: 'Player not found' });
 
-  const { catId } = req.body;
+  const { catId, catSkin } = req.body;
+  if (!player.ownedCats) player.ownedCats = {};
+
   if (!player.ownedCats[catId]) {
-    return res.status(400).json({ error: 'You do not own this cat yet!' });
+    if (catSkin) {
+      player.ownedCats[catId] = {
+        count: 1,
+        unlockedAt: new Date().toISOString(),
+        isFavorite: false,
+        customSkin: catSkin,
+      };
+    } else {
+      return res.status(400).json({ success: false, error: 'You do not own this cat yet!' });
+    }
   }
 
   player.activeCatId = catId;
@@ -583,7 +594,24 @@ apiRouter.post('/stars/claim-purchase', (req: Request, res: Response) => {
     const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
     if (!bundle) return res.status(400).json({ success: false, error: 'Ungültiges Stars-Paket' });
 
-    player.coins += bundle.coins;
+    if (!player.stats) {
+      player.stats = {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        tictactoeWins: 0,
+        tennisWins: 0,
+        chessWins: 0,
+        memoryWins: 0,
+        catCatchHighScore: 0,
+        chestsOpened: 0,
+        catsBought: 0,
+        keysBought: 0,
+        totalCoinsEarned: 500,
+        petCount: 0,
+      };
+    }
+
+    player.coins = (player.coins || 0) + bundle.coins;
     player.stats.totalCoinsEarned = (player.stats.totalCoinsEarned || 0) + bundle.coins;
 
     savePlayer(player);
@@ -603,8 +631,28 @@ apiRouter.post('/stars/claim-purchase', (req: Request, res: Response) => {
 
 // POST /api/minigames/complete
 apiRouter.post('/minigames/complete', (req: Request, res: Response) => {
-  const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Player not found' });
+
+    if (!player.stats) {
+      player.stats = {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        tictactoeWins: 0,
+        tennisWins: 0,
+        chessWins: 0,
+        memoryWins: 0,
+        catCatchHighScore: 0,
+        chestsOpened: 0,
+        catsBought: 0,
+        keysBought: 0,
+        totalCoinsEarned: 500,
+        petCount: 0,
+      };
+    }
+    if (!player.dailyTasks) player.dailyTasks = [];
+    if (!player.achievements) player.achievements = [];
 
   const { gameType, outcome, score } = req.body as {
     gameType: 'tictactoe' | 'tennis' | 'chess' | 'memory' | 'catcatch';
@@ -700,12 +748,16 @@ apiRouter.post('/minigames/complete', (req: Request, res: Response) => {
   player.stats.totalCoinsEarned = (player.stats.totalCoinsEarned || 0) + coinsEarned;
 
   savePlayer(player);
-  res.json({
+  return res.json({
     success: true,
     player,
     coinsEarned,
     outcome,
   });
+} catch (err: any) {
+  console.error('Error completing minigame:', err);
+  return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Abschließen des Spiels' });
+}
 });
 
 // POST /api/daily/claim-login

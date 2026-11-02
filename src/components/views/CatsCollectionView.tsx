@@ -110,22 +110,6 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                soundManager.playClick();
-                setShowRarityGuide(true);
-              }}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold active:scale-95 transition-all border ${
-                isLight
-                  ? 'bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-200'
-                  : 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30'
-              }`}
-              title="Was ist selten & krass?"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Was ist selten?</span>
-            </button>
-
             {onOpenTradingMarket && (
               <button
                 onClick={() => {
