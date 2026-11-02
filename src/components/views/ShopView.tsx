@@ -1,94 +1,76 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
-import { PlayerData, CatSkin, Rarity, KeyType, Theme } from '../../types/game';
-import { CAT_SKINS, RARITY_CONFIG, getDuplicateCoinBonus } from '../../data/catsData';
+import { PlayerData, KeyType, Theme } from '../../types/game';
 import { KEY_EXCHANGE_RATES } from '../../data/chestsData';
-import { CatIllustration } from '../CatIllustration';
+import { TELEGRAM_STARS_BUNDLES, StarsBundle } from '../../data/starsBundles';
 import { soundManager } from '../../utils/audio';
 import { triggerHaptic } from '../../utils/telegram';
-import { ShoppingBag, Search, Coins, Key, Check, AlertCircle, ShoppingCart } from 'lucide-react';
+import { ShoppingBag, Key, Check, AlertCircle, Sparkles, Coins, Zap, ShieldCheck } from 'lucide-react';
 
 interface ShopViewProps {
   player: PlayerData;
-  onBuyCat: (catId: string) => Promise<{ skin: CatSkin; isDuplicate: boolean; duplicateCoinsGained?: number }>;
+  onBuyCoinsWithStars: (bundleId: string) => Promise<any>;
   onBuyKey: (keyType: KeyType, amount?: number) => Promise<void>;
-  onOpenExchangeModal: () => void;
+  onOpenExchangeModal?: () => void;
+  onNavigateToChests?: () => void;
   theme?: Theme;
 }
 
 export const ShopView: React.FC<ShopViewProps> = ({
   player,
-  onBuyCat,
+  onBuyCoinsWithStars,
   onBuyKey,
-  onOpenExchangeModal,
+  onNavigateToChests,
   theme = 'light',
 }) => {
-  const [activeTab, setActiveTab] = useState<'cats' | 'keys'>('cats');
-  const [selectedRarity, setSelectedRarity] = useState<Rarity | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCatToBuy, setSelectedCatToBuy] = useState<CatSkin | null>(null);
+  const [activeTab, setActiveTab] = useState<'stars' | 'keys'>('stars');
+  const [selectedBundle, setSelectedBundle] = useState<StarsBundle | null>(null);
+  const [keyQuantities, setKeyQuantities] = useState<Record<KeyType, number>>({
+    wooden: 1,
+    blue: 1,
+    epic: 1,
+    legendary: 1,
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isLight = theme === 'light';
 
-  // Filter purchasable cats
-  const filteredCats = useMemo(() => {
-    return CAT_SKINS.filter(cat => {
-      if (selectedRarity !== 'all' && cat.rarity !== selectedRarity) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        if (!cat.name.toLowerCase().includes(q) && !cat.description.toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
-  }, [selectedRarity, searchQuery]);
-
-  const handlePurchaseCat = async (cat: CatSkin) => {
-    if (player.coins < cat.price) {
-      soundManager.playError();
-      setErrorMsg('Nicht genügend Münzen vorhanden!');
-      return;
-    }
-
+  const handlePurchaseStarsBundle = async (bundle: StarsBundle) => {
     soundManager.playClick();
     triggerHaptic('heavy');
     setIsProcessing(true);
     setErrorMsg(null);
+    setPurchaseSuccess(null);
 
     try {
-      const res = await onBuyCat(cat.id);
+      await onBuyCoinsWithStars(bundle.id);
       soundManager.playCoin();
       triggerHaptic('success');
-      setPurchaseSuccess(
-        res.isDuplicate
-          ? `${cat.name} gekauft! Duplikat-Bonus erhalten: +${res.duplicateCoinsGained || getDuplicateCoinBonus(cat)} Münzen! 🪙🎉`
-          : `${cat.name} erfolgreich freigeschaltet! 🐱🎉`
-      );
-
+      setPurchaseSuccess(`Erfolg! +${bundle.coins.toLocaleString('de-DE')} Münzen für ${bundle.stars} ⭐ erhalten! 🎉`);
       confetti({
-        particleCount: 50,
-        spread: 60,
+        particleCount: 60,
+        spread: 70,
         origin: { y: 0.6 },
       });
-
-      setSelectedCatToBuy(null);
+      setSelectedBundle(null);
     } catch (err: any) {
       soundManager.playError();
-      setErrorMsg(err.message || 'Kauf fehlgeschlagen');
+      setErrorMsg(err?.message || 'Zahlung abgebrochen oder fehlgeschlagen');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handlePurchaseKey = async (keyType: KeyType, amount: number = 1) => {
+  const handlePurchaseKey = async (keyType: KeyType) => {
+    const amount = keyQuantities[keyType] || 1;
     const rate = KEY_EXCHANGE_RATES[keyType];
     const totalCost = rate.coinPrice * amount;
 
     if (player.coins < totalCost) {
       soundManager.playError();
-      setErrorMsg(`Nicht genügend Münzen für ${amount}x ${rate.name}!`);
+      setErrorMsg(`Nicht genügend Münzen für ${amount}x ${rate.name}! Du hast ${player.coins.toLocaleString('de-DE')} 🪙, benötigst aber ${totalCost.toLocaleString('de-DE')} 🪙.`);
       return;
     }
 
@@ -96,16 +78,16 @@ export const ShopView: React.FC<ShopViewProps> = ({
     triggerHaptic('medium');
     setIsProcessing(true);
     setErrorMsg(null);
+    setPurchaseSuccess(null);
 
     try {
       await onBuyKey(keyType, amount);
       soundManager.playCoin();
       triggerHaptic('success');
       setPurchaseSuccess(`${amount}x ${rate.name} für ${totalCost.toLocaleString('de-DE')} Münzen gekauft! 🗝️`);
-
       confetti({
-        particleCount: 35,
-        spread: 45,
+        particleCount: 40,
+        spread: 50,
         origin: { y: 0.6 },
       });
     } catch (err: any) {
@@ -116,23 +98,25 @@ export const ShopView: React.FC<ShopViewProps> = ({
     }
   };
 
+  const keyList: KeyType[] = ['wooden', 'blue', 'epic', 'legendary'];
+
   return (
     <div className="space-y-4 pb-20 select-none">
-      {/* 1. Header Banner */}
+      {/* 1. Shop Header Banner */}
       <div className={`rounded-3xl p-4 shadow-xl border transition-colors ${
         isLight
-          ? 'bg-gradient-to-r from-amber-50 via-orange-50 to-pink-50 border-amber-200 text-slate-800'
-          : 'bg-gradient-to-r from-slate-900 to-amber-950/60 border-amber-500/30 text-white'
+          ? 'bg-gradient-to-r from-amber-50 via-yellow-50 to-orange-50 border-amber-200 text-slate-800'
+          : 'bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900 border-amber-500/30 text-white'
       }`}>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className={`p-2 rounded-xl ${isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/20 text-amber-400'}`}>
-              <ShoppingBag className="w-4 h-4" />
+            <div className={`p-2.5 rounded-2xl ${isLight ? 'bg-amber-100 text-amber-700 shadow-sm' : 'bg-amber-500/20 text-amber-400'}`}>
+              <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
-              <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Katzen- & Schlüssel-Shop</h2>
+              <h2 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>CatWorld Shop</h2>
               <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Tausche Münzen gegen Kistenschlüssel oder schalte besondere Katzen direkt frei.
+                Telegram Stars & Kistenschlüssel
               </p>
             </div>
           </div>
@@ -145,332 +129,280 @@ export const ShopView: React.FC<ShopViewProps> = ({
           </div>
         </div>
 
-        {/* Tab-Wechsel: Katzen vs Schlüssel */}
-        <div className={`grid grid-cols-2 gap-1 p-1 rounded-xl text-xs font-bold mt-2 ${
-          isLight ? 'bg-white/80 border border-slate-200' : 'bg-slate-900/80'
+        {/* Tab-Wechsel: Stars Münzen-Shop vs Schlüssel */}
+        <div className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl text-xs font-bold ${
+          isLight ? 'bg-white/80 border border-slate-200' : 'bg-slate-900/80 border border-slate-800'
         }`}>
           <button
             onClick={() => {
               soundManager.playClick();
-              setActiveTab('cats');
+              setActiveTab('stars');
               setPurchaseSuccess(null);
+              setErrorMsg(null);
             }}
-            className={`py-1.5 rounded-lg transition-all ${
-              activeTab === 'cats'
-                ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-xs'
-                : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
+            className={`py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+              activeTab === 'stars'
+                ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-white shadow-md font-black'
+                : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
             }`}
           >
-            Katzen-Skins
+            <span>⭐</span>
+            <span>Münzen (Telegram Stars)</span>
           </button>
           <button
             onClick={() => {
               soundManager.playClick();
               setActiveTab('keys');
               setPurchaseSuccess(null);
+              setErrorMsg(null);
             }}
-            className={`py-1.5 rounded-lg transition-all ${
+            className={`py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
               activeTab === 'keys'
-                ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-xs'
-                : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md font-black'
+                : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
             }`}
           >
-            Schlüssel mit Münzen kaufen
+            <Key className="w-3.5 h-3.5" />
+            <span>Schlüssel kaufen</span>
           </button>
         </div>
       </div>
 
-      {/* Benachrichtigungen */}
+      {/* Success / Error Banners */}
       {purchaseSuccess && (
-        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 text-xs text-emerald-800 flex items-center justify-between animate-in fade-in">
-          <div className="flex items-center gap-1.5">
+        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-xs text-emerald-900 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{purchaseSuccess}</span>
+            <span className="font-semibold">{purchaseSuccess}</span>
           </div>
-          <button onClick={() => setPurchaseSuccess(null)} className="text-slate-400 hover:text-slate-700 text-xs">
+          <button onClick={() => setPurchaseSuccess(null)} className="text-slate-400 hover:text-slate-700 text-xs px-1">
             ✕
           </button>
         </div>
       )}
 
       {errorMsg && (
-        <div className="bg-rose-50 border border-rose-300 rounded-2xl p-3 text-xs text-rose-800 flex items-center justify-between animate-in fade-in">
-          <div className="flex items-center gap-1.5">
+        <div className="bg-rose-50 border border-rose-300 rounded-2xl p-3.5 text-xs text-rose-900 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{errorMsg}</span>
+            <span className="font-semibold">{errorMsg}</span>
           </div>
-          <button onClick={() => setErrorMsg(null)} className="text-slate-400 hover:text-slate-700 text-xs">
+          <button onClick={() => setErrorMsg(null)} className="text-slate-400 hover:text-slate-700 text-xs px-1">
             ✕
           </button>
         </div>
       )}
 
-      {/* --- TAB 1: KATZEN KATALOG --- */}
-      {activeTab === 'cats' && (
+      {/* TAB 1: TELEGRAM STARS COINS SHOP */}
+      {activeTab === 'stars' && (
         <div className="space-y-3">
-          {/* Suche & Filter */}
-          <div className="space-y-2">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Katzen im Shop suchen..."
-                className={`w-full rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-pink-500 border transition-colors ${
-                  isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900/80 border-slate-800 text-white'
-                }`}
-              />
-            </div>
-
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-[11px] font-bold">
-              {(['all', 'common', 'uncommon', 'rare', 'epic', 'legendary'] as (Rarity | 'all')[]).map(r => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    soundManager.playClick();
-                    setSelectedRarity(r);
-                  }}
-                  className={`px-3 py-1 rounded-xl whitespace-nowrap transition-all border ${
-                    selectedRarity === r
-                      ? 'bg-pink-500 text-white border-pink-500 shadow-xs'
-                      : isLight
-                      ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {r === 'all' ? 'Alle Seltenheiten' : r.charAt(0).toUpperCase() + r.slice(1)}
-                </button>
-              ))}
+          {/* Info Banner */}
+          <div className={`p-3.5 rounded-2xl border text-xs flex items-center gap-3 ${
+            isLight
+              ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+              : 'bg-amber-950/20 border-amber-500/20 text-amber-300'
+          }`}>
+            <div className="text-2xl shrink-0">⭐</div>
+            <div className="flex-1">
+              <p className="font-bold">Offizieller Telegram Stars (XTR) Shop</p>
+              <p className={`text-[11px] ${isLight ? 'text-amber-800' : 'text-amber-400/90'}`}>
+                Katzen können nicht direkt gekauft werden, sondern werden aus Kisten gezogen. Hole dir Münzen mit Stars für Schlüssel & Truhen!
+              </p>
             </div>
           </div>
 
-          {/* Katzen-Karten */}
-          <div className="grid grid-cols-2 gap-3">
-            {filteredCats.map(cat => {
-              const isOwned = !!player.ownedCats[cat.id];
-              const rarityMeta = RARITY_CONFIG[cat.rarity];
-              const canAfford = player.coins >= cat.price;
+          {/* Stars Bundles Grid */}
+          <div className="grid grid-cols-1 gap-2.5">
+            {TELEGRAM_STARS_BUNDLES.map(bundle => {
+              const isPopular = bundle.popular;
+              const isBest = bundle.bestValue;
 
               return (
                 <div
-                  key={cat.id}
-                  className={`rounded-2xl p-3 flex flex-col items-center text-center border relative transition-all ${
+                  key={bundle.id}
+                  className={`relative p-3.5 rounded-2xl border transition-all duration-200 ${
                     isLight
-                      ? 'bg-white border-slate-200 shadow-xs hover:shadow-md'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}
+                      ? 'bg-white border-slate-200 hover:border-amber-300 hover:shadow-md'
+                      : 'bg-slate-900/90 border-slate-800 hover:border-amber-500/40 hover:shadow-md'
+                  } ${isBest ? 'ring-2 ring-amber-400/60' : ''}`}
                 >
-                  {isOwned && (
-                    <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                      <Check className="w-2.5 h-2.5" /> Im Besitz
+                  {/* Badge */}
+                  {bundle.badge && (
+                    <span className={`absolute -top-2.5 right-4 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-xs ${
+                      isBest
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                        : isPopular
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                        : 'bg-blue-500 text-white'
+                    }`}>
+                      {bundle.badge}
                     </span>
                   )}
 
-                  <div className="py-2">
-                    <CatIllustration cat={cat} size={90} pixelBlur={false} />
-                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    {/* Icon & Details */}
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-inner shrink-0 ${
+                        isLight ? 'bg-amber-50 border border-amber-100' : 'bg-slate-800 border border-slate-700'
+                      }`}>
+                        {bundle.icon}
+                      </div>
 
-                  <div className="w-full">
-                    <h4 className={`font-bold text-xs truncate max-w-full ${isLight ? 'text-slate-800' : 'text-white'}`}>
-                      {cat.name}
-                    </h4>
-                    <span
-                      className="text-[9px] font-black uppercase font-mono block mt-0.5"
-                      style={{ color: rarityMeta.color }}
-                    >
-                      {rarityMeta.name}
-                    </span>
-
-                    <div className="text-[10px] text-slate-400 font-mono mt-1">
-                      ★ {cat.collectorValue} Wertung
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                            {bundle.coins.toLocaleString('de-DE')}
+                          </span>
+                          <span className="text-amber-500 font-bold text-xs">🪙 Münzen</span>
+                        </div>
+                        <h4 className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                          {bundle.title}
+                        </h4>
+                        {bundle.bonusText && (
+                          <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            {bundle.bonusText}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
+                    {/* Purchase Button */}
                     <button
-                      onClick={() => {
-                        soundManager.playClick();
-                        setSelectedCatToBuy(cat);
-                      }}
-                      className={`w-full mt-3 py-2 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 ${
-                        canAfford
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white shadow-md active:scale-95'
-                          : isLight
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      onClick={() => handlePurchaseStarsBundle(bundle)}
+                      disabled={isProcessing}
+                      className={`shrink-0 px-3.5 py-2 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 ${
+                        isBest
+                          ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white hover:brightness-105'
+                          : 'bg-gradient-to-r from-yellow-500 to-amber-500 text-slate-950 hover:brightness-105'
                       }`}
                     >
-                      <Coins className="w-3.5 h-3.5 text-amber-300" />
-                      <span>{cat.price.toLocaleString('de-DE')} 🪙</span>
+                      <span className="text-sm">⭐</span>
+                      <span>{bundle.stars} Stars</span>
                     </button>
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Trust footer */}
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 pt-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Sichere Telegram Stars Transaktionen • Sofortige Gutschrift</span>
+          </div>
         </div>
       )}
 
-      {/* --- TAB 2: SCHLÜSSEL KATALOG --- */}
+      {/* TAB 2: KEYS SHOP */}
       {activeTab === 'keys' && (
         <div className="space-y-3">
           <div className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
-            isLight ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-950/30 border-amber-700/50 text-amber-200'
+            isLight ? 'bg-blue-50/70 border-blue-200 text-blue-900' : 'bg-blue-950/30 border-blue-500/20 text-blue-300'
           }`}>
-            <span>Kaufe Schlüssel mit Münzen, um jederzeit Kisten zu öffnen!</span>
-            <button
-              onClick={() => {
-                soundManager.playClick();
-                onOpenExchangeModal();
-              }}
-              className="py-1 px-2.5 bg-amber-500 text-white font-bold rounded-xl text-[10px] shadow-xs shrink-0"
-            >
-              Schnelltausch
-            </button>
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-blue-500 shrink-0" />
+              <span>Verwende deine gesammelten Münzen, um Kistenschlüssel zu kaufen!</span>
+            </div>
+            {onNavigateToChests && (
+              <button
+                onClick={onNavigateToChests}
+                className="font-bold underline shrink-0 hover:text-blue-600"
+              >
+                Zu den Kisten
+              </button>
+            )}
           </div>
 
-          <div className="space-y-2.5">
-            {(Object.keys(KEY_EXCHANGE_RATES) as KeyType[]).map(kType => {
-              const rate = KEY_EXCHANGE_RATES[kType];
-              const owned = player.keys[kType] || 0;
-              const canAffordSingle = player.coins >= rate.coinPrice;
-              const canAffordFive = player.coins >= rate.coinPrice * 5;
+          <div className="grid grid-cols-1 gap-2.5">
+            {keyList.map(keyType => {
+              const rate = KEY_EXCHANGE_RATES[keyType];
+              const qty = keyQuantities[keyType] || 1;
+              const totalCost = rate.coinPrice * qty;
+              const canAfford = player.coins >= totalCost;
+              const currentOwned = player.keys[keyType] || 0;
 
               return (
                 <div
-                  key={kType}
-                  className={`rounded-3xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg border transition-all ${
+                  key={keyType}
+                  className={`p-3.5 rounded-2xl border transition-all ${
                     isLight
-                      ? 'bg-white border-slate-200 hover:border-slate-300'
-                      : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                      ? 'bg-white border-slate-200'
+                      : 'bg-slate-900/90 border-slate-800'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`text-3xl p-2.5 rounded-2xl border shrink-0 ${
-                      isLight ? 'bg-amber-50 border-amber-200' : 'bg-slate-800/80 border-slate-700'
-                    }`}>
-                      🗝️
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs"
+                        style={{ backgroundColor: rate.color }}
+                      >
+                        <Key className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className={`text-sm font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          {rate.name}
+                        </h4>
+                        <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          Im Inventar: <strong className="text-amber-500">{currentOwned}x</strong> vorhanden
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className={`font-black text-sm truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{rate.name}</h3>
-                        <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.2 rounded-full font-bold">
-                          Vorrat: {owned}x
-                        </span>
+                    <div className="text-right">
+                      <div className="text-xs font-mono font-bold text-amber-500">
+                        {rate.coinPrice.toLocaleString('de-DE')} 🪙
                       </div>
-                      <p className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                        {rate.description}
-                      </p>
-                      <div className="text-xs font-mono font-black text-amber-500 mt-1">
-                        {rate.coinPrice.toLocaleString('de-DE')} Münzen pro Stück
-                      </div>
+                      <span className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        pro Schlüssel
+                      </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                    <button
-                      onClick={() => handlePurchaseKey(kType, 1)}
-                      disabled={!canAffordSingle || isProcessing}
-                      className={`py-2 px-3 rounded-xl text-xs font-black flex items-center gap-1 transition-all ${
-                        canAffordSingle
-                          ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs active:scale-95'
-                          : isLight
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      }`}
-                    >
-                      <Coins className="w-3 h-3" />
-                      <span>1x kaufen</span>
-                    </button>
+                  <p className={`text-[11px] mb-3 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    {rate.description}
+                  </p>
+
+                  {/* Quantity selector & Buy Button */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-1">
+                      <span className={`text-[10px] mr-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Menge:</span>
+                      {[1, 3, 5, 10].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => {
+                            soundManager.playClick();
+                            setKeyQuantities(prev => ({ ...prev, [keyType]: n }));
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
+                            qty === n
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : isLight
+                              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {n}x
+                        </button>
+                      ))}
+                    </div>
 
                     <button
-                      onClick={() => handlePurchaseKey(kType, 5)}
-                      disabled={!canAffordFive || isProcessing}
-                      className={`py-2 px-3 rounded-xl text-xs font-black flex items-center gap-1 transition-all ${
-                        canAffordFive
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white shadow-md active:scale-95'
-                          : isLight
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      onClick={() => handlePurchaseKey(keyType)}
+                      disabled={!canAfford || isProcessing}
+                      className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs ${
+                        canAfford
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:brightness-105 active:scale-95 cursor-pointer'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
                       }`}
-                      title={`5 Schlüssel für ${(rate.coinPrice * 5).toLocaleString('de-DE')} Münzen`}
                     >
-                      <span>5x kaufen</span>
+                      <Key className="w-3.5 h-3.5" />
+                      <span>{qty}x kaufen ({totalCost.toLocaleString('de-DE')} 🪙)</span>
                     </button>
                   </div>
                 </div>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Kauf-Bestätigungsdialog */}
-      {selectedCatToBuy && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-          <div className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 text-center space-y-4 border ${
-            isLight
-              ? 'bg-white border-amber-300 text-slate-800'
-              : 'bg-gradient-to-b from-slate-900 to-slate-950 border-amber-500/40 text-white'
-          }`}>
-            <h3 className={`text-lg font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Kauf bestätigen</h3>
-
-            <div className="flex justify-center -my-2">
-              <CatIllustration
-                cat={selectedCatToBuy}
-                size={130}
-                pixelBlur={!player.ownedCats[selectedCatToBuy.id]}
-              />
-            </div>
-
-            <div>
-              <div className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                {player.ownedCats[selectedCatToBuy.id] ? selectedCatToBuy.name : 'Mysterium Katze (Gesperrt)'}
-              </div>
-              <p className={`text-xs mt-1 italic ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
-                {player.ownedCats[selectedCatToBuy.id]
-                  ? `"${selectedCatToBuy.description}"`
-                  : '🔒 Beim Kauf wird das verpixelte Bild dauerhaft enthüllt und deiner Sammlung hinzugefügt!'}
-              </p>
-            </div>
-
-            <div className={`rounded-xl p-3 text-xs space-y-1.5 text-left border ${
-              isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/80 border-slate-700'
-            }`}>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Preis:</span>
-                <span className="font-mono font-bold text-amber-500">{selectedCatToBuy.price.toLocaleString('de-DE')} Münzen</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Guthaben nach dem Kauf:</span>
-                <span className={`font-mono font-bold ${isLight ? 'text-slate-700' : 'text-slate-200'}`}>
-                  {(player.coins - selectedCatToBuy.price).toLocaleString('de-DE')} Münzen
-                </span>
-              </div>
-              {player.ownedCats[selectedCatToBuy.id] && (
-                <div className="text-[10px] text-amber-600 pt-1 border-t border-slate-200 font-bold">
-                  Du besitzt diesen Skin bereits. Als Duplikat erhältst du +{getDuplicateCoinBonus(selectedCatToBuy)} Bonus-Münzen!
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                onClick={() => setSelectedCatToBuy(null)}
-                className={`py-2.5 rounded-xl font-bold text-xs ${
-                  isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={() => handlePurchaseCat(selectedCatToBuy)}
-                disabled={isProcessing}
-                className="py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 font-black text-xs text-white shadow-md active:scale-95"
-              >
-                {isProcessing ? 'Wird gekauft...' : 'Jetzt kaufen'}
-              </button>
-            </div>
           </div>
         </div>
       )}

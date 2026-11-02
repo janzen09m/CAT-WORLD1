@@ -812,8 +812,334 @@
           "coinsAwarded": 0
         }
       ]
+    },
+    "test_player_verifier": {
+      "id": "test_player_verifier",
+      "playerName": "Katzenfreund",
+      "catCustomName": "Schneeflöckchen",
+      "activeCatId": "cat-01",
+      "createdAt": "2026-11-02T16:22:01.377Z",
+      "coins": 5900,
+      "starShards": 0,
+      "keys": {
+        "wooden": 1,
+        "blue": 2,
+        "epic": 0,
+        "legendary": 0
+      },
+      "ownedCats": {
+        "cat-01": {
+          "count": 1,
+          "unlockedAt": "2026-11-02T16:22:01.377Z",
+          "isFavorite": true,
+          "customSkin": {
+            "id": "cat-01",
+            "name": "White Cat #6",
+            "rarity": "common",
+            "price": 150,
+            "collectorValue": 20,
+            "resaleValue": 50,
+            "starShardValue": 5,
+            "description": "A gentle, snow-white feline with faithful sapphire eyes. Your loyal starting companion.",
+            "category": "Standard",
+            "visualEffect": "none",
+            "furColor": "#FFFFFF",
+            "bellyColor": "#F8FAFC",
+            "eyeColor": "#38BDF8",
+            "earInnerColor": "#FDA4AF",
+            "noseColor": "#FB7185",
+            "patternType": "solid",
+            "accessory": "none",
+            "mintNumber": 6,
+            "dna": "DNA-GLOBAL-000006",
+            "generation": 1,
+            "isProcedural": false,
+            "personality": "Treuer Starter-Gefährte"
+          }
+        },
+        "ucat-1793636521378-368": {
+          "count": 1,
+          "unlockedAt": "2026-11-02T16:22:01.378Z",
+          "isFavorite": false,
+          "customSkin": {
+            "id": "ucat-1793636521378-368",
+            "name": "Simba Dreamer #7",
+            "rarity": "uncommon",
+            "price": 1745,
+            "collectorValue": 52,
+            "resaleValue": 698,
+            "duplicateCoinBonus": 349,
+            "description": "Harmonious 2D feline with perfectly matching palette. Unique Mint #7.",
+            "category": "Nature",
+            "visualEffect": "none",
+            "furColor": "#E2E8F0",
+            "bellyColor": "#FFFFFF",
+            "eyeColor": "#06B6D4",
+            "earInnerColor": "#FDA4AF",
+            "noseColor": "#FDA4AF",
+            "patternType": "tuxedo",
+            "patternColor": "#94A3B8",
+            "accessory": "none",
+            "mintNumber": 7,
+            "dna": "99B2-8FF9-6EEF",
+            "generation": 1,
+            "personality": "Mischievous Trickster",
+            "earType": "pointed",
+            "eyeType": "round",
+            "renderStyle": "2d-harmonious",
+            "toy": "none",
+            "backgroundType": "none",
+            "isProcedural": true
+          }
+        },
+        "ucat-1793636521430-751": {
+          "count": 1,
+          "unlockedAt": "2026-11-02T16:22:01.430Z",
+          "isFavorite": false,
+          "customSkin": {
+            "id": "ucat-1793636521430-751",
+            "name": "Chrono Apex #8",
+            "rarity": "epic",
+            "price": 10402,
+            "collectorValue": 240,
+            "resaleValue": 4161,
+            "duplicateCoinBonus": 2080,
+            "description": "An incredible 3D volumetric sculpted cat with deep depth shading, specular highlights, and gloss finish!",
+            "category": "Elemental",
+            "visualEffect": "neon-glow",
+            "furColor": "#D946EF",
+            "bellyColor": "#FDF4FF",
+            "eyeColor": "#06B6D4",
+            "earInnerColor": "#F5D0FE",
+            "noseColor": "#FDA4AF",
+            "patternType": "stripes",
+            "patternColor": "#A21CAF",
+            "accessory": "glasses",
+            "mintNumber": 8,
+            "dna": "75B8-6054-E8C6",
+            "generation": 1,
+            "personality": "Curious Explorer",
+            "earType": "pointed",
+            "eyeType": "mystic-gem",
+            "renderStyle": "3d-volumetric",
+            "toy": "mouse-toy",
+            "backgroundType": "none",
+            "isProcedural": true
+          }
+        }
+      },
+      "roomBackground": "cozy_living",
+      "stats": {
+        "gamesPlayed": 0,
+        "gamesWon": 0,
+        "tictactoeWins": 0,
+        "tennisWins": 0,
+        "chessWins": 0,
+        "memoryWins": 0,
+        "catCatchHighScore": 0,
+        "chestsOpened": 2,
+        "catsBought": 0,
+        "keysBought": 2,
+        "totalCoinsEarned": 7000,
+        "petCount": 0
+      },
+      "dailyTasks": [
+        {
+          "id": "daily-minigames",
+          "title": "Spielerische Kätzchen",
+          "description": "Spiele mindestens 3 Minispiele",
+          "goal": 3,
+          "current": 0,
+          "rewardCoins": 120,
+          "claimed": false
+        },
+        {
+          "id": "daily-tictactoe",
+          "title": "Drei in einer Reihe!",
+          "description": "Gewinne eine Runde Tic-Tac-Toe gegen die KI",
+          "goal": 1,
+          "current": 0,
+          "rewardCoins": 80,
+          "claimed": false
+        },
+        {
+          "id": "daily-tennis",
+          "title": "Matchball!",
+          "description": "Spiele ein Match Cat Tennis",
+          "goal": 1,
+          "current": 0,
+          "rewardCoins": 90,
+          "claimed": false
+        },
+        {
+          "id": "daily-chest",
+          "title": "Schatzsucher",
+          "description": "Öffne heute eine beliebige Schatztruhe",
+          "goal": 1,
+          "current": 1,
+          "rewardCoins": 180,
+          "claimed": false
+        },
+        {
+          "id": "daily-pet",
+          "title": "Schnurr-Therapie",
+          "description": "Streichle deine Katze 5-mal im Katzenzimmer",
+          "goal": 5,
+          "current": 0,
+          "rewardCoins": 60,
+          "claimed": false
+        }
+      ],
+      "achievements": [
+        {
+          "id": "ach-first-chest",
+          "title": "Erstes Schatzglück",
+          "description": "Öffne deine allererste Schatztruhe",
+          "category": "chests",
+          "goal": 1,
+          "current": 2,
+          "rewardCoins": 300,
+          "unlocked": true,
+          "claimed": false
+        },
+        {
+          "id": "ach-collector-5",
+          "title": "Katzenfamilie",
+          "description": "Besitze mindestens 5 verschiedene Katzen",
+          "category": "collection",
+          "goal": 5,
+          "current": 3,
+          "rewardCoins": 750,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-collector-15",
+          "title": "Katzenparadies",
+          "description": "Besitze mindestens 15 verschiedene Katzen",
+          "category": "collection",
+          "goal": 15,
+          "current": 3,
+          "rewardCoins": 2500,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-collector-30",
+          "title": "Meistersammler",
+          "description": "Besitze mindestens 30 verschiedene Katzen",
+          "category": "collection",
+          "goal": 30,
+          "current": 3,
+          "rewardCoins": 8000,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-collector-all",
+          "title": "Oberster Katzen-Monarch",
+          "description": "Sammle über 50+ legendäre & mythische Katzen",
+          "category": "collection",
+          "goal": 50,
+          "current": 3,
+          "rewardCoins": 35000,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-chess-win",
+          "title": "Großmeister Miau",
+          "description": "Gewinne eine Schachpartie gegen die Katzen-KI",
+          "category": "games",
+          "goal": 1,
+          "current": 0,
+          "rewardCoins": 600,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-tennis-ace",
+          "title": "Wimbledon-Ass",
+          "description": "Gewinne 5 Matches im Cat Tennis",
+          "category": "games",
+          "goal": 5,
+          "current": 0,
+          "rewardCoins": 500,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-tictactoe-10",
+          "title": "Krallen-Stratege",
+          "description": "Gewinne 10 Runden Tic-Tac-Toe",
+          "category": "games",
+          "goal": 10,
+          "current": 0,
+          "rewardCoins": 450,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-catch-500",
+          "title": "Flinke Pfoten",
+          "description": "Erziele mindestens 300 Punkte in Cat Catch",
+          "category": "games",
+          "goal": 300,
+          "current": 0,
+          "rewardCoins": 500,
+          "unlocked": false,
+          "claimed": false
+        },
+        {
+          "id": "ach-key-buyer",
+          "title": "Schlüsselmeister",
+          "description": "Kaufe einen Schatztruhen-Schlüssel mit Münzen",
+          "category": "wealth",
+          "goal": 1,
+          "current": 2,
+          "rewardCoins": 400,
+          "unlocked": true,
+          "claimed": false
+        },
+        {
+          "id": "ach-streak-7",
+          "title": "Treuer Gefährte",
+          "description": "Erreiche eine 7-Tage-Login-Serie",
+          "category": "wealth",
+          "goal": 7,
+          "current": 1,
+          "rewardCoins": 1500,
+          "unlocked": false,
+          "claimed": false
+        }
+      ],
+      "loginStreak": 1,
+      "lastLoginDate": "2026-11-02",
+      "dailyLoginClaimedToday": false,
+      "chestHistory": [
+        {
+          "id": "ch-1793636521430",
+          "timestamp": 1793636521430,
+          "chestId": "blue",
+          "catId": "ucat-1793636521430-751",
+          "catName": "Chrono Apex #8",
+          "rarity": "epic",
+          "isDuplicate": false,
+          "coinsAwarded": 0
+        },
+        {
+          "id": "ch-1793636521378",
+          "timestamp": 1793636521378,
+          "chestId": "wooden",
+          "catId": "ucat-1793636521378-368",
+          "catName": "Simba Dreamer #7",
+          "rarity": "uncommon",
+          "isDuplicate": false,
+          "coinsAwarded": 0
+        }
+      ]
     }
   },
   "serverStartedAt": "2026-10-27T14:21:00.430Z",
-  "nextGlobalMintNumber": 6
+  "nextGlobalMintNumber": 9
 }

@@ -218,9 +218,9 @@ export default function App() {
     initGame();
   }, [initGame]);
 
-  // Authenticated API request helper
+  // Authenticated API request helper with resilient JSON handling
   const apiRequest = async (url: string, body: Record<string, any>) => {
-    if (!player) throw new Error('Not logged in');
+    if (!player) throw new Error('Nicht eingeloggt');
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-player-id': player.id,
@@ -229,15 +229,36 @@ export default function App() {
       headers['Authorization'] = `Bearer ${sessionToken}`;
       headers['x-session-token'] = sessionToken;
     }
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...body, playerId: player.id }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Action failed');
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...body, playerId: player.id }),
+      });
+    } catch {
+      throw new Error('Verbindung zum Spielserver fehlgeschlagen. Bitte prüfe dein Internet.');
     }
+
+    let data: any = null;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+    } else {
+      const text = await res.text().catch(() => '');
+      console.warn('API returned non-JSON response:', res.status, text.slice(0, 100));
+    }
+
+    if (!res.ok || !data || !data.success) {
+      const errMsg = data?.error || (res.status === 401 ? 'Sitzung abgelaufen. Bitte Spiel neu laden.' : `Serverfehler (${res.status})`);
+      throw new Error(errMsg);
+    }
+
     if (data.player) {
       try {
         localStorage.setItem(`catworld_player_cache_${data.player.id}`, JSON.stringify(data.player));
@@ -303,13 +324,29 @@ export default function App() {
     };
   };
 
-  const handleBuyCat = async (catId: string) => {
-    const res = await apiRequest('/api/shop/buy-cat', { catId });
-    return {
-      skin: res.skin,
-      isDuplicate: res.isDuplicate,
-      duplicateCoinsGained: res.duplicateCoinsGained,
-    };
+  const handleBuyCoinsWithStars = async (bundleId: string) => {
+    const res = await apiRequest('/api/stars/create-invoice', { bundleId });
+    if (res.invoiceUrl && typeof window !== 'undefined' && typeof window.Telegram?.WebApp?.openInvoice === 'function') {
+      return new Promise<void>((resolve, reject) => {
+        window.Telegram!.WebApp!.openInvoice!(res.invoiceUrl, async (status: string) => {
+          if (status === 'paid') {
+            try {
+              await apiRequest('/api/stars/claim-purchase', { bundleId });
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          } else if (status === 'cancelled') {
+            reject(new Error('Zahlung abgebrochen'));
+          } else {
+            reject(new Error(`Zahlungsstatus: ${status}`));
+          }
+        });
+      });
+    } else {
+      // Direct simulation mode or instant claim
+      return await apiRequest('/api/stars/claim-purchase', { bundleId });
+    }
   };
 
   const handleBuyKey = async (keyType: KeyType, amount: number = 1) => {
@@ -460,9 +497,10 @@ export default function App() {
           {activeTab === 'shop' && (
             <ShopView
               player={player}
-              onBuyCat={handleBuyCat}
+              onBuyCoinsWithStars={handleBuyCoinsWithStars}
               onBuyKey={handleBuyKey}
               onOpenExchangeModal={() => setShowConvertModal(true)}
+              onNavigateToChests={() => setActiveTab('chests')}
               theme={theme}
             />
           )}

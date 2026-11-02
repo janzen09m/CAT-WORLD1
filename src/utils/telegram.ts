@@ -77,11 +77,28 @@ declare global {
         };
         openTelegramLink?: (url: string) => void;
         openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+        openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
         onEvent?: (eventType: string, eventHandler: (...args: any[]) => void) => void;
         offEvent?: (eventType: string, eventHandler: (...args: any[]) => void) => void;
       };
     };
   }
+}
+
+export function openTelegramInvoice(
+  invoiceUrl: string,
+  callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void
+): boolean {
+  if (typeof window !== 'undefined' && typeof window.Telegram?.WebApp?.openInvoice === 'function') {
+    try {
+      window.Telegram.WebApp.openInvoice(invoiceUrl, callback);
+      return true;
+    } catch (e) {
+      console.warn('Failed to call Telegram openInvoice:', e);
+      return false;
+    }
+  }
+  return false;
 }
 
 export function isTelegramWebApp(): boolean {

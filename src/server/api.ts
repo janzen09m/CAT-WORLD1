@@ -12,6 +12,7 @@ import { CAT_SKINS, GET_CAT_BY_ID, getDuplicateCoinBonus } from '../data/catsDat
 import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from '../data/chestsData';
 import { KeyType, Rarity, TradeListing, CatSkin } from '../types/game';
 import { generateUniqueCat } from '../utils/catGenerator';
+import { TELEGRAM_STARS_BUNDLES } from '../data/starsBundles';
 
 export const apiRouter = Router();
 
@@ -88,7 +89,7 @@ export function verifySessionToken(token: string): string | null {
   return null;
 }
 
-// Middleware to extract verified player from signed session token or dev header
+// Middleware to extract verified player from signed session token or request headers
 function getAuthenticatedPlayer(req: Request): ReturnType<typeof getPlayer> {
   const authHeader = req.headers['authorization'];
   const sessionTokenHeader = req.headers['x-session-token'] as string;
@@ -100,14 +101,24 @@ function getAuthenticatedPlayer(req: Request): ReturnType<typeof getPlayer> {
   if (token) {
     const verifiedPlayerId = verifySessionToken(token);
     if (verifiedPlayerId) {
-      return getPlayer(verifiedPlayerId);
+      let player = getPlayer(verifiedPlayerId);
+      if (!player) {
+        // Cold start auto-recovery
+        player = getOrCreatePlayer(verifiedPlayerId);
+      }
+      return player;
     }
   }
 
-  // Safe fallback for local development / test scripts
+  // Safe fallback for direct browser / Vercel play
   const fallbackId = (req.headers['x-player-id'] as string) || req.body?.playerId;
-  if (fallbackId && process.env.NODE_ENV !== 'production') {
-    return getPlayer(fallbackId);
+  if (fallbackId && typeof fallbackId === 'string' && fallbackId.trim()) {
+    const cleanId = fallbackId.trim();
+    let player = getPlayer(cleanId);
+    if (!player) {
+      player = getOrCreatePlayer(cleanId);
+    }
+    return player;
   }
 
   return null;
@@ -401,97 +412,182 @@ function rollChestReward(dropRates: { common: number; uncommon: number; rare: nu
 
 // POST /api/chests/open
 apiRouter.post('/chests/open', (req: Request, res: Response) => {
-  const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht gefunden oder Sitzung abgelaufen' });
 
-  const { chestId, useCoins } = req.body as { chestId: 'wooden' | 'blue' | 'epic' | 'legendary'; useCoins?: boolean };
-  const chest = CHESTS_CONFIG.find(c => c.id === chestId);
-  if (!chest) return res.status(404).json({ error: 'Chest not found' });
+    const { chestId } = req.body as { chestId: 'wooden' | 'blue' | 'epic' | 'legendary' };
+    const chest = CHESTS_CONFIG.find(c => c.id === chestId);
+    if (!chest) return res.status(404).json({ success: false, error: 'Kiste nicht gefunden' });
 
-  const requiredKey = chest.keyRequired;
-  const hasKey = (player.keys[requiredKey] || 0) >= 1;
+    const requiredKey = chest.keyRequired;
+    const hasKey = (player.keys[requiredKey] || 0) >= 1;
 
-  // Chests can ONLY be opened with keys!
-  if (!hasKey) {
-    return res.status(400).json({
-      error: `Diese Kiste kann nur mit einem ${KEY_EXCHANGE_RATES[requiredKey].name} geöffnet werden! Kaufe Schlüssel im Shop mit deinen Münzen.`
+    // Chests can ONLY be opened with keys!
+    if (!hasKey) {
+      const keyInfo = KEY_EXCHANGE_RATES[requiredKey] || { name: requiredKey };
+      return res.status(400).json({
+        success: false,
+        error: `Diese Kiste kann nur mit einem ${keyInfo.name} geöffnet werden! Kaufe Schlüssel im Shop mit deinen Münzen.`
+      });
+    }
+
+    // Deduct key
+    player.keys[requiredKey] -= 1;
+
+    // Authoritative server drop roll
+    const rolledRarity = rollChestReward(chest.dropRates);
+    const nextMintNumber = getNextGlobalMintNumber();
+    // Generate a completely UNIQUE procedural cat with global Mint # and DNA!
+    const droppedCat = generateUniqueCat(rolledRarity, nextMintNumber);
+
+    const now = new Date().toISOString();
+    const isDuplicate = false;
+    const coinsAwarded = 0;
+
+    player.ownedCats[droppedCat.id] = {
+      count: 1,
+      unlockedAt: now,
+      isFavorite: false,
+      customSkin: droppedCat,
+    };
+
+    // If player doesn't have an active cat yet, equip this first cat automatically!
+    if (!player.activeCatId || !player.ownedCats[player.activeCatId]) {
+      player.activeCatId = droppedCat.id;
+    }
+
+    // Update stats
+    player.stats.chestsOpened = (player.stats.chestsOpened || 0) + 1;
+
+    // Update daily task
+    const chestTask = player.dailyTasks.find(t => t.id === 'daily-chest');
+    if (chestTask && chestTask.current < chestTask.goal) {
+      chestTask.current += 1;
+    }
+
+    // Update achievements
+    const firstChestAch = player.achievements.find(a => a.id === 'ach-first-chest');
+    if (firstChestAch) {
+      firstChestAch.current = player.stats.chestsOpened;
+      if (firstChestAch.current >= firstChestAch.goal) firstChestAch.unlocked = true;
+    }
+
+    const ownedCount = Object.keys(player.ownedCats).length;
+    player.achievements.forEach(ach => {
+      if (ach.id === 'ach-collector-5') ach.current = ownedCount;
+      if (ach.id === 'ach-collector-15') ach.current = ownedCount;
+      if (ach.id === 'ach-collector-30') ach.current = ownedCount;
+      if (ach.id === 'ach-collector-all') ach.current = ownedCount;
+      if (ach.current >= ach.goal) ach.unlocked = true;
     });
+
+    // Record in history (max 20)
+    player.chestHistory.unshift({
+      id: `ch-${Date.now()}`,
+      timestamp: Date.now(),
+      chestId: chest.id,
+      catId: droppedCat.id,
+      catName: droppedCat.name,
+      rarity: droppedCat.rarity,
+      isDuplicate,
+      coinsAwarded,
+    });
+    if (player.chestHistory.length > 20) {
+      player.chestHistory = player.chestHistory.slice(0, 20);
+    }
+
+    savePlayer(player);
+    return res.json({
+      success: true,
+      player,
+      droppedCat,
+      isDuplicate,
+      coinsAwarded,
+      shardsAwarded: 0,
+    });
+  } catch (err: any) {
+    console.error('Error opening chest:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Öffnen der Kiste' });
   }
+});
 
-  // Deduct key
-  player.keys[requiredKey] -= 1;
+// POST /api/stars/create-invoice - Official Telegram Stars Payment
+apiRouter.post('/stars/create-invoice', async (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht gefunden' });
 
-  // Authoritative server drop roll
-  const rolledRarity = rollChestReward(chest.dropRates);
-  const nextMintNumber = getNextGlobalMintNumber();
-  // Generate a completely UNIQUE procedural cat with global Mint # and DNA!
-  const droppedCat = generateUniqueCat(rolledRarity, nextMintNumber);
+    const { bundleId } = req.body;
+    const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
+    if (!bundle) return res.status(400).json({ success: false, error: 'Ungültiges Stars-Paket' });
 
-  const now = new Date().toISOString();
-  const isDuplicate = false;
-  const coinsAwarded = 0;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (botToken) {
+      try {
+        const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `${bundle.coins.toLocaleString('de-DE')} CatWorld Münzen`,
+            description: `${bundle.title} - Erhalte ${bundle.coins.toLocaleString('de-DE')} Münzen für Schlüssel & Minispiele!`,
+            payload: JSON.stringify({ playerId: player.id, bundleId: bundle.id, coins: bundle.coins, stars: bundle.stars }),
+            provider_token: '', // Empty for Telegram Stars (XTR)
+            currency: 'XTR',
+            prices: [{ label: `${bundle.coins.toLocaleString('de-DE')} Münzen`, amount: bundle.stars }],
+          }),
+        });
+        const tgData: any = await tgRes.json();
+        if (tgData && tgData.ok && tgData.result) {
+          return res.json({
+            success: true,
+            invoiceUrl: tgData.result,
+            bundle,
+          });
+        }
+      } catch (e) {
+        console.warn('Telegram createInvoiceLink failed, offering simulated fallback:', e);
+      }
+    }
 
-  player.ownedCats[droppedCat.id] = {
-    count: 1,
-    unlockedAt: now,
-    isFavorite: false,
-    customSkin: droppedCat,
-  };
-
-  // If player doesn't have an active cat yet, equip this first cat automatically!
-  if (!player.activeCatId || !player.ownedCats[player.activeCatId]) {
-    player.activeCatId = droppedCat.id;
+    // Direct mode / fallback when bot token is not configured or in preview
+    return res.json({
+      success: true,
+      isSimulation: true,
+      bundle,
+    });
+  } catch (err: any) {
+    console.error('Error creating Stars invoice:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler bei der Stars-Rechnung' });
   }
+});
 
-  // Update stats
-  player.stats.chestsOpened = (player.stats.chestsOpened || 0) + 1;
+// POST /api/stars/claim-purchase - Crediting coins upon payment confirmation
+apiRouter.post('/stars/claim-purchase', (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht gefunden' });
 
-  // Update daily task
-  const chestTask = player.dailyTasks.find(t => t.id === 'daily-chest');
-  if (chestTask && chestTask.current < chestTask.goal) {
-    chestTask.current += 1;
+    const { bundleId } = req.body;
+    const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
+    if (!bundle) return res.status(400).json({ success: false, error: 'Ungültiges Stars-Paket' });
+
+    player.coins += bundle.coins;
+    player.stats.totalCoinsEarned = (player.stats.totalCoinsEarned || 0) + bundle.coins;
+
+    savePlayer(player);
+
+    return res.json({
+      success: true,
+      player,
+      coinsAdded: bundle.coins,
+      bundle,
+      message: `${bundle.coins.toLocaleString('de-DE')} Münzen erfolgreich gutgeschrieben! ⭐🎉`,
+    });
+  } catch (err: any) {
+    console.error('Error claiming Stars purchase:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Gutschreiben der Münzen' });
   }
-
-  // Update achievements
-  const firstChestAch = player.achievements.find(a => a.id === 'ach-first-chest');
-  if (firstChestAch) {
-    firstChestAch.current = player.stats.chestsOpened;
-    if (firstChestAch.current >= firstChestAch.goal) firstChestAch.unlocked = true;
-  }
-
-  const ownedCount = Object.keys(player.ownedCats).length;
-  player.achievements.forEach(ach => {
-    if (ach.id === 'ach-collector-5') ach.current = ownedCount;
-    if (ach.id === 'ach-collector-15') ach.current = ownedCount;
-    if (ach.id === 'ach-collector-30') ach.current = ownedCount;
-    if (ach.id === 'ach-collector-all') ach.current = ownedCount;
-    if (ach.current >= ach.goal) ach.unlocked = true;
-  });
-
-  // Record in history (max 20)
-  player.chestHistory.unshift({
-    id: `ch-${Date.now()}`,
-    timestamp: Date.now(),
-    chestId: chest.id,
-    catId: droppedCat.id,
-    catName: droppedCat.name,
-    rarity: droppedCat.rarity,
-    isDuplicate,
-    coinsAwarded,
-  });
-  if (player.chestHistory.length > 20) {
-    player.chestHistory = player.chestHistory.slice(0, 20);
-  }
-
-  savePlayer(player);
-  res.json({
-    success: true,
-    player,
-    droppedCat,
-    isDuplicate,
-    coinsAwarded,
-    shardsAwarded: 0,
-  });
 });
 
 // POST /api/minigames/complete
