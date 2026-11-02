@@ -102,7 +102,7 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
                 className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0 shadow-inner"
                 style={{ backgroundColor: `${chest.color}20`, border: `1.5px solid ${chest.color}` }}
               >
-                {chest.id === 'wooden' ? '🪵' : chest.id === 'blue' ? '💎' : chest.id === 'epic' ? '🔮' : '👑'}
+                {chest.id === 'wooden' ? '🛒' : chest.id === 'blue' ? '💎' : chest.id === 'epic' ? '🔮' : '👑'}
               </div>
 
               {/* Chest Info */}
