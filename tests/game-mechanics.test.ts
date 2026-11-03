@@ -83,4 +83,35 @@ describe('CAT WORLD - Game Mechanics & Economics Tests', () => {
       }
     }
   });
+
+  it('should validate all Telegram Stars bundles and prices', async () => {
+    const { TELEGRAM_STARS_BUNDLES } = await import('../src/data/starsBundles.js');
+    assert.ok(TELEGRAM_STARS_BUNDLES.length >= 5, 'Expected at least 5 stars coin bundles');
+    for (const bundle of TELEGRAM_STARS_BUNDLES) {
+      assert.ok(bundle.stars > 0, `Stars price must be positive for ${bundle.id}`);
+      assert.ok(bundle.coins > 0, `Coin reward must be positive for ${bundle.id}`);
+      assert.ok(bundle.title.length <= 32, `Telegram title must not exceed 32 chars: ${bundle.title}`);
+    }
+  });
+
+  it('should correctly recognize Admin Telegram User ID 8979248747', async () => {
+    const { isUserAdmin } = await import('../src/server/api.js');
+    
+    // Admin player object
+    const adminPlayer: any = {
+      id: 'CW-TG-8979248747',
+      telegramUserId: 8979248747,
+      playerName: 'CatAdmin',
+    };
+    const regularPlayer: any = {
+      id: 'CW-TG-12345678',
+      telegramUserId: 12345678,
+      playerName: 'Player1',
+    };
+
+    assert.strictEqual(isUserAdmin(adminPlayer, { headers: {} } as any), true);
+    assert.strictEqual(isUserAdmin(regularPlayer, { headers: {} } as any), false);
+    assert.strictEqual(isUserAdmin(null, { headers: { 'x-telegram-user-id': '8979248747' } } as any), true);
+    assert.strictEqual(isUserAdmin(null, { headers: { 'x-player-id': 'CW-TG-8979248747' } } as any), true);
+  });
 });

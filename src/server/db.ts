@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import pg from 'pg';
-import { PlayerData, LeaderboardEntry, CatSkin } from '../types/game';
+import { PlayerData, LeaderboardEntry, CatSkin, TradeListing } from '../types/game';
 import { CAT_SKINS, GET_CAT_BY_ID } from '../data/catsData';
 import { INITIAL_DAILY_TASKS, INITIAL_ACHIEVEMENTS } from '../data/tasksAndAchievements';
 
@@ -34,6 +34,7 @@ if (connectionString) {
 
 interface DatabaseStore {
   players: Record<string, PlayerData>;
+  marketListings: TradeListing[];
   serverStartedAt: string;
   nextGlobalMintNumber?: number;
 }
@@ -41,6 +42,7 @@ interface DatabaseStore {
 // In-memory cache
 let memoryStore: DatabaseStore = {
   players: {},
+  marketListings: [],
   serverStartedAt: new Date().toISOString(),
   nextGlobalMintNumber: 1,
 };
@@ -534,6 +536,37 @@ export function savePlayer(player: PlayerData): void {
   memoryStore.players[player.id] = player;
   saveToDisk();
   savePlayerToPg(player);
+}
+
+export function getAllRegisteredPlayers(): PlayerData[] {
+  return Object.values(memoryStore.players || {});
+}
+
+export function getMarketListings(): TradeListing[] {
+  if (!Array.isArray(memoryStore.marketListings)) {
+    memoryStore.marketListings = [];
+  }
+  return memoryStore.marketListings;
+}
+
+export function addMarketListing(listing: TradeListing): void {
+  if (!Array.isArray(memoryStore.marketListings)) {
+    memoryStore.marketListings = [];
+  }
+  memoryStore.marketListings.unshift(listing);
+  saveToDisk();
+}
+
+export function removeMarketListing(listingId: string): TradeListing | null {
+  if (!Array.isArray(memoryStore.marketListings)) {
+    memoryStore.marketListings = [];
+    return null;
+  }
+  const index = memoryStore.marketListings.findIndex(l => l.id === listingId);
+  if (index === -1) return null;
+  const [removed] = memoryStore.marketListings.splice(index, 1);
+  saveToDisk();
+  return removed;
 }
 
 function checkDailyReset(player: PlayerData): void {

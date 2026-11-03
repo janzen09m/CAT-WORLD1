@@ -29,6 +29,8 @@ interface ProfileViewProps {
   onClaimAchievement: (achievementId: string) => Promise<void>;
   theme?: Theme;
   onToggleTheme?: () => void;
+  isAdmin?: boolean;
+  onOpenAdminPanel?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -39,6 +41,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onClaimAchievement,
   theme = 'dark',
   onToggleTheme,
+  isAdmin,
+  onOpenAdminPanel,
 }) => {
   const [activeTab, setActiveTab] = useState<'stats' | 'tasks' | 'achievements' | 'leaderboard' | 'settings'>('stats');
   const [isEditingNames, setIsEditingNames] = useState(false);
@@ -124,6 +128,41 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   return (
     <div className="space-y-4 pb-20 select-none">
+      {/* Admin Quick Access Banner */}
+      {isAdmin && (
+        <div className={`rounded-3xl p-3.5 border shadow-lg flex items-center justify-between ${
+          isLight
+            ? 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300'
+            : 'bg-gradient-to-r from-amber-950/40 via-yellow-950/30 to-amber-950/40 border-amber-500/40'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-amber-400 flex items-center justify-center text-slate-950 text-lg shadow-sm font-black shrink-0">
+              👑
+            </div>
+            <div>
+              <div className="text-xs font-black text-amber-500 flex items-center gap-1.5">
+                <span>Admin-Zentrale</span>
+                <span className="text-[9px] bg-amber-500/20 text-amber-500 px-1.5 rounded font-mono">
+                  ID: 8979248747
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400">Spieler verwalten & Münzen verteilen</div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              triggerHaptic('medium');
+              onOpenAdminPanel?.();
+            }}
+            className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-xs shadow-sm hover:brightness-105 active:scale-95 transition-all"
+          >
+            Öffnen
+          </button>
+        </div>
+      )}
+
       {/* 1. Profile Hero Card */}
       <div className={`rounded-3xl p-4 shadow-xl border transition-colors ${
         isLight

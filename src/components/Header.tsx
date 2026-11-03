@@ -12,6 +12,8 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onOpenTelegramBotModal?: () => void;
   onOpenProfile?: () => void;
+  isAdmin?: boolean;
+  onOpenAdminPanel?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +24,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   onOpenTelegramBotModal,
   onOpenProfile,
+  isAdmin,
+  onOpenAdminPanel,
 }) => {
   const [muted, setMuted] = useState(soundManager.getIsMuted());
   const [showKeysDropdown, setShowKeysDropdown] = useState(false);
@@ -80,6 +84,22 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right: Coins, Keys & Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Admin Crown Button (Exclusive for Telegram ID 8979248747) */}
+          {isAdmin && (
+            <button
+              onClick={() => {
+                soundManager.playClick();
+                triggerHaptic('medium');
+                onOpenAdminPanel?.();
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/30 border border-amber-300 hover:brightness-105 active:scale-95 transition-all cursor-pointer animate-pulse"
+              title="Admin-Konsole öffnen (ID: 8979248747)"
+            >
+              <span>👑</span>
+              <span className="text-[10px] uppercase font-black tracking-wider">Admin</span>
+            </button>
+          )}
+
           {/* Coins Balance */}
           <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black font-mono border ${
             isLight

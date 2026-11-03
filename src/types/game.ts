@@ -48,6 +48,8 @@ export interface CatSkin {
 
 export interface TradeListing {
   id: string;
+  sellerPlayerId?: string;
+  sellerTelegramId?: number;
   sellerName: string;
   sellerTelegram?: string;
   cat: CatSkin;
@@ -90,6 +92,7 @@ export interface PlayerStats {
   keysBought: number;
   keysConverted?: number;
   totalCoinsEarned: number;
+  coinsSpent?: number;
   petCount: number;
 }
 

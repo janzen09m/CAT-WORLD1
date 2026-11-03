@@ -7,54 +7,96 @@ import {
   getLeaderboard,
   calculateCollectorValue,
   getNextGlobalMintNumber,
+  getAllRegisteredPlayers,
+  getMarketListings,
+  addMarketListing,
+  removeMarketListing,
 } from './db';
 import { CAT_SKINS, GET_CAT_BY_ID, getDuplicateCoinBonus } from '../data/catsData';
 import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from '../data/chestsData';
-import { KeyType, Rarity, TradeListing, CatSkin } from '../types/game';
+import { KeyType, Rarity, TradeListing, CatSkin, PlayerData } from '../types/game';
 import { generateUniqueCat } from '../utils/catGenerator';
 import { TELEGRAM_STARS_BUNDLES } from '../data/starsBundles';
 
 export const apiRouter = Router();
 
-// In-memory Telegram Cat Trading Market Listings
-const MARKET_LISTINGS: TradeListing[] = [
-  {
-    id: 'listing-1',
-    sellerName: 'Alex_TG',
-    sellerTelegram: 'alex_tg_collector',
-    cat: generateUniqueCat('rare', 1042),
-    priceCoins: 3800,
-    wantsRarity: 'rare',
-    createdAt: Date.now() - 3600000,
-  },
-  {
-    id: 'listing-2',
-    sellerName: 'MeowMaster',
-    sellerTelegram: 'meow_master_99',
-    cat: generateUniqueCat('epic', 1088),
-    priceCoins: 8500,
-    wantsRarity: 'epic',
-    createdAt: Date.now() - 7200000,
-  },
-  {
-    id: 'listing-3',
-    sellerName: 'Elena_Kitties',
-    sellerTelegram: 'elena_cats',
-    cat: generateUniqueCat('uncommon', 1015),
-    priceCoins: 1400,
-    wantsRarity: 'uncommon',
-    createdAt: Date.now() - 1800000,
-  },
-  {
-    id: 'listing-4',
-    sellerName: 'CosmicCollector',
-    sellerTelegram: 'cosmic_tg',
-    cat: generateUniqueCat('legendary', 1099),
-    priceCoins: 28000,
-    wantsRarity: 'legendary',
-    createdAt: Date.now() - 900000,
-  },
-];
+// Send real-time notification to Telegram Bot user
+export async function sendTelegramNotification(telegramUserId: number | string | undefined, messageHtml: string): Promise<boolean> {
+  const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
+  if (!botToken || !telegramUserId) {
+    console.log(`[TelegramBot Notification] Skipped (botToken: ${Boolean(botToken)}, target: ${telegramUserId})`);
+    return false;
+  }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: telegramUserId,
+        text: messageHtml,
+        parse_mode: 'HTML',
+      }),
+    });
+    const data: any = await res.json();
+    return Boolean(data && data.ok);
+  } catch (err) {
+    console.warn(`[TelegramBot Notification] Failed to notify ${telegramUserId}:`, err);
+    return false;
+  }
+}
+
+// Admin validation helper for Telegram User ID 8979248747
+export function isUserAdmin(player: PlayerData | null, req: Request): boolean {
+  const adminIdNum = 8979248747;
+  const adminIdStr = '8979248747';
+  const adminPlayerId = 'CW-TG-8979248747';
+
+  const headerPlayerId = (req.headers['x-player-id'] as string) || '';
+  const headerTgId = (req.headers['x-telegram-user-id'] as string) || '';
+
+  if (headerPlayerId === adminPlayerId || headerTgId === adminIdStr) return true;
+
+  if (player) {
+    if (player.telegramUserId === adminIdNum || String(player.telegramUserId) === adminIdStr) return true;
+    if (player.id === adminPlayerId || player.id === adminIdStr) return true;
+  }
+  return false;
+}
+
+// Seed initial marketplace listings if empty
+function ensureInitialMarketListings() {
+  const current = getMarketListings();
+  if (current.length === 0) {
+    addMarketListing({
+      id: 'listing-1',
+      sellerName: 'Alex_TG',
+      sellerTelegram: 'alex_tg_collector',
+      cat: generateUniqueCat('rare', 1042),
+      priceCoins: 3800,
+      wantsRarity: 'rare',
+      createdAt: Date.now() - 3600000,
+    });
+    addMarketListing({
+      id: 'listing-2',
+      sellerName: 'MeowMaster',
+      sellerTelegram: 'meow_master_99',
+      cat: generateUniqueCat('epic', 1088),
+      priceCoins: 8500,
+      wantsRarity: 'epic',
+      createdAt: Date.now() - 7200000,
+    });
+    addMarketListing({
+      id: 'listing-3',
+      sellerName: 'Elena_Kitties',
+      sellerTelegram: 'elena_cats',
+      cat: generateUniqueCat('uncommon', 1015),
+      priceCoins: 1400,
+      wantsRarity: 'uncommon',
+      createdAt: Date.now() - 1800000,
+    });
+  }
+}
+ensureInitialMarketListings();
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'catworld_secure_session_secret_2026_salt_87a3b4c';
 
@@ -351,70 +393,132 @@ apiRouter.post('/shop/buy-cat', (req: Request, res: Response) => {
 
 // POST /api/shop/buy-key
 apiRouter.post('/shop/buy-key', (req: Request, res: Response) => {
-  const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht angemeldet' });
 
-  const { keyType, amount } = req.body as { keyType: KeyType; amount?: number };
-  const rate = KEY_EXCHANGE_RATES[keyType];
-  if (!rate) return res.status(400).json({ error: 'Invalid key type' });
+    const { keyType, amount } = req.body as { keyType: KeyType; amount?: number };
+    const rate = KEY_EXCHANGE_RATES[keyType];
+    if (!rate) return res.status(400).json({ success: false, error: 'Ungültiger Schlüsseltyp' });
 
-  const qty = Math.max(1, Math.floor(amount || 1));
-  const totalPrice = rate.coinPrice * qty;
+    const qty = Math.max(1, Math.floor(amount || 1));
+    const totalPrice = rate.coinPrice * qty;
 
-  if (player.coins < totalPrice) {
-    return res.status(400).json({ error: `Not enough coins for ${qty}x ${rate.name}!` });
+    if (player.coins < totalPrice) {
+      return res.status(400).json({
+        success: false,
+        error: `Nicht genügend Münzen! Du hast ${player.coins.toLocaleString('de-DE')} 🪙, benötigst aber ${totalPrice.toLocaleString('de-DE')} 🪙.`,
+      });
+    }
+
+    // Defensive initialization
+    if (!player.keys) {
+      player.keys = { wooden: 2, blue: 1, epic: 0, legendary: 0 };
+    }
+    if (!player.stats) {
+      player.stats = {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        tictactoeWins: 0,
+        tennisWins: 0,
+        chessWins: 0,
+        memoryWins: 0,
+        catCatchHighScore: 0,
+        chestsOpened: 0,
+        catsBought: 0,
+        keysBought: 0,
+        totalCoinsEarned: 500,
+        petCount: 0,
+      };
+    }
+    if (!player.achievements) {
+      player.achievements = [];
+    }
+
+    player.coins -= totalPrice;
+    player.keys[keyType] = (player.keys[keyType] || 0) + qty;
+    player.stats.keysBought = (player.stats.keysBought || 0) + qty;
+    player.stats.coinsSpent = (player.stats.coinsSpent || 0) + totalPrice;
+
+    // Check key master achievement
+    const ach = player.achievements.find(a => a.id === 'ach-key-buyer');
+    if (ach) {
+      ach.current = player.stats.keysBought;
+      if (ach.current >= ach.goal) ach.unlocked = true;
+    }
+
+    savePlayer(player);
+    return res.json({
+      success: true,
+      player,
+      keyType,
+      quantity: qty,
+      totalPrice,
+      newCount: player.keys[keyType],
+    });
+  } catch (err: any) {
+    console.error('Error in /api/shop/buy-key:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Serverfehler beim Kauf des Schlüssels' });
   }
-
-  player.coins -= totalPrice;
-  player.keys[keyType] = (player.keys[keyType] || 0) + qty;
-  player.stats.keysBought = (player.stats.keysBought || 0) + qty;
-
-  // Check key master achievement
-  const ach = player.achievements.find(a => a.id === 'ach-key-buyer');
-  if (ach) {
-    ach.current = player.stats.keysBought;
-    if (ach.current >= ach.goal) ach.unlocked = true;
-  }
-
-  savePlayer(player);
-  res.json({
-    success: true,
-    player,
-    keyType,
-    quantity: qty,
-    totalPrice,
-    newCount: player.keys[keyType],
-  });
 });
 
 // POST /api/exchange/convert-keys -> now buy keys with coins!
 apiRouter.post('/exchange/convert-keys', (req: Request, res: Response) => {
-  const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht angemeldet' });
 
-  const { keyType, amount } = req.body as { keyType: KeyType; amount?: number };
-  const rate = KEY_EXCHANGE_RATES[keyType];
-  if (!rate) return res.status(400).json({ error: 'Invalid key type' });
+    const { keyType, amount } = req.body as { keyType: KeyType; amount?: number };
+    const rate = KEY_EXCHANGE_RATES[keyType];
+    if (!rate) return res.status(400).json({ success: false, error: 'Ungültiger Schlüsseltyp' });
 
-  const qty = Math.max(1, Math.floor(amount || 1));
-  const totalPrice = rate.coinPrice * qty;
+    const qty = Math.max(1, Math.floor(amount || 1));
+    const totalPrice = rate.coinPrice * qty;
 
-  if (player.coins < totalPrice) {
-    return res.status(400).json({ error: `Not enough coins for ${qty}x ${rate.name}!` });
+    if (player.coins < totalPrice) {
+      return res.status(400).json({
+        success: false,
+        error: `Nicht genügend Münzen für ${qty}x ${rate.name}!`,
+      });
+    }
+
+    if (!player.keys) {
+      player.keys = { wooden: 2, blue: 1, epic: 0, legendary: 0 };
+    }
+    if (!player.stats) {
+      player.stats = {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        tictactoeWins: 0,
+        tennisWins: 0,
+        chessWins: 0,
+        memoryWins: 0,
+        catCatchHighScore: 0,
+        chestsOpened: 0,
+        catsBought: 0,
+        keysBought: 0,
+        totalCoinsEarned: 500,
+        petCount: 0,
+      };
+    }
+
+    player.coins -= totalPrice;
+    player.keys[keyType] = (player.keys[keyType] || 0) + qty;
+    player.stats.keysBought = (player.stats.keysBought || 0) + qty;
+
+    savePlayer(player);
+    return res.json({
+      success: true,
+      player,
+      keyType,
+      quantity: qty,
+      totalPrice,
+      newCount: player.keys[keyType],
+    });
+  } catch (err: any) {
+    console.error('Error in /api/exchange/convert-keys:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Serverfehler beim Schlüsseltausch' });
   }
-
-  player.coins -= totalPrice;
-  player.keys[keyType] = (player.keys[keyType] || 0) + qty;
-  player.stats.keysBought = (player.stats.keysBought || 0) + qty;
-
-  savePlayer(player);
-  res.json({
-    success: true,
-    player,
-    keyType,
-    quantity: qty,
-    totalPrice,
-  });
 });
 
 // Helper for random chest drop selection
@@ -544,19 +648,23 @@ apiRouter.post('/stars/create-invoice', async (req: Request, res: Response) => {
     const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
     if (!bundle) return res.status(400).json({ success: false, error: 'Ungültiges Stars-Paket' });
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
     if (botToken) {
       try {
+        const cleanTitle = `${bundle.coins.toLocaleString('de-DE')} Münzen`.slice(0, 32);
+        const cleanDescription = `CatWorld: ${bundle.coins.toLocaleString('de-DE')} Münzen für Schlüssel & Truhen`.slice(0, 255);
+        const payloadStr = JSON.stringify({ playerId: player.id, bundleId: bundle.id }).slice(0, 128);
+
         const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: `${bundle.coins.toLocaleString('de-DE')} CatWorld Münzen`,
-            description: `${bundle.title} - Erhalte ${bundle.coins.toLocaleString('de-DE')} Münzen für Schlüssel & Minispiele!`,
-            payload: JSON.stringify({ playerId: player.id, bundleId: bundle.id, coins: bundle.coins, stars: bundle.stars }),
+            title: cleanTitle,
+            description: cleanDescription,
+            payload: payloadStr,
             provider_token: '', // Empty for Telegram Stars (XTR)
             currency: 'XTR',
-            prices: [{ label: `${bundle.coins.toLocaleString('de-DE')} Münzen`, amount: bundle.stars }],
+            prices: [{ label: cleanTitle, amount: bundle.stars }],
           }),
         });
         const tgData: any = await tgRes.json();
@@ -566,6 +674,8 @@ apiRouter.post('/stars/create-invoice', async (req: Request, res: Response) => {
             invoiceUrl: tgData.result,
             bundle,
           });
+        } else {
+          console.warn('Telegram createInvoiceLink returned non-ok result:', tgData);
         }
       } catch (e) {
         console.warn('Telegram createInvoiceLink failed, offering simulated fallback:', e);
@@ -840,107 +950,363 @@ apiRouter.get('/leaderboard', (_req: Request, res: Response) => {
 
 // GET /api/market/listings
 apiRouter.get('/market/listings', (_req: Request, res: Response) => {
-  res.json({ success: true, listings: MARKET_LISTINGS });
+  res.json({ success: true, listings: getMarketListings() });
 });
 
-// POST /api/market/buy
-apiRouter.post('/market/buy', (req: Request, res: Response) => {
-  const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+// POST /api/market/list - List an owned cat on the marketplace
+apiRouter.post('/market/list', (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht angemeldet' });
 
-  const { listingId } = req.body;
-  const index = MARKET_LISTINGS.findIndex(l => l.id === listingId);
-  if (index === -1) return res.status(404).json({ error: 'Trade listing no longer available' });
+    const { catId, priceCoins } = req.body;
+    if (!catId || !player.ownedCats[catId]) {
+      return res.status(400).json({ success: false, error: 'Du besitzt diese Katze nicht!' });
+    }
 
-  const listing = MARKET_LISTINGS[index];
-  if (player.coins < listing.priceCoins) {
-    return res.status(400).json({ error: `Not enough coins! You need ${listing.priceCoins} Coins.` });
+    if (player.activeCatId === catId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Du kannst deine aktuell ausgerüstete Katze nicht auf den Markt stellen! Rüste zuerst eine andere Katze aus.',
+      });
+    }
+
+    const price = Math.max(50, Math.min(1000000, Math.floor(Number(priceCoins) || 500)));
+    const catInfo = player.ownedCats[catId];
+    const catSkin = catInfo.customSkin || GET_CAT_BY_ID(catId);
+
+    // Remove or decrement from player inventory
+    if (catInfo.count > 1) {
+      catInfo.count -= 1;
+    } else {
+      delete player.ownedCats[catId];
+    }
+
+    const listing: TradeListing = {
+      id: `listing-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      sellerPlayerId: player.id,
+      sellerTelegramId: player.telegramUserId,
+      sellerName: player.playerName,
+      sellerTelegram: player.telegramUsername,
+      cat: catSkin,
+      priceCoins: price,
+      wantsRarity: catSkin.rarity,
+      createdAt: Date.now(),
+    };
+
+    addMarketListing(listing);
+    savePlayer(player);
+
+    return res.json({
+      success: true,
+      player,
+      listing,
+      listings: getMarketListings(),
+      message: `${catSkin.name} für ${price.toLocaleString('de-DE')} Münzen auf dem Markt angeboten!`,
+    });
+  } catch (err: any) {
+    console.error('Error listing cat on market:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Einstellen auf den Markt' });
   }
-
-  // Deduct coins & add unique cat to collection
-  player.coins -= listing.priceCoins;
-  const now = new Date().toISOString();
-  player.ownedCats[listing.cat.id] = {
-    count: 1,
-    unlockedAt: now,
-    isFavorite: false,
-    customSkin: listing.cat,
-  };
-
-  // Remove from market and auto-generate fresh Telegram community listing
-  MARKET_LISTINGS.splice(index, 1);
-  const freshRarities: Rarity[] = ['uncommon', 'rare', 'epic', 'legendary'];
-  const newRarity = freshRarities[Math.floor(Math.random() * freshRarities.length)];
-  const communityNames = ['CryptoCat_99', 'SatoshiWhiskers', 'NekoMaster', 'TelegramTrader', 'LunaCollector', 'PixelPaw_TG'];
-  MARKET_LISTINGS.push({
-    id: `listing-${Date.now()}`,
-    sellerName: communityNames[Math.floor(Math.random() * communityNames.length)],
-    sellerTelegram: 'tg_community',
-    cat: generateUniqueCat(newRarity),
-    priceCoins: newRarity === 'uncommon' ? 1500 : newRarity === 'rare' ? 4200 : newRarity === 'epic' ? 9500 : 30000,
-    wantsRarity: newRarity,
-    createdAt: Date.now(),
-  });
-
-  savePlayer(player);
-  res.json({ success: true, player, boughtCat: listing.cat, listings: MARKET_LISTINGS });
 });
 
-// POST /api/market/trade (Cat-for-Cat swap!)
-apiRouter.post('/market/trade', (req: Request, res: Response) => {
-  const player = getAuthenticatedPlayer(req);
-  if (!player) return res.status(401).json({ error: 'Player not found' });
+// POST /api/market/buy - Buy cat with coins & notify seller via Telegram bot
+apiRouter.post('/market/buy', async (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht angemeldet' });
 
-  const { listingId, offeredCatId } = req.body;
-  const index = MARKET_LISTINGS.findIndex(l => l.id === listingId);
-  if (index === -1) return res.status(404).json({ error: 'Trade listing no longer available' });
+    const { listingId } = req.body;
+    const listings = getMarketListings();
+    const listing = listings.find(l => l.id === listingId);
+    if (!listing) return res.status(404).json({ success: false, error: 'Dieses Marktangebot ist nicht mehr verfügbar' });
 
-  const listing = MARKET_LISTINGS[index];
-  const offeredOwned = player.ownedCats[offeredCatId];
-  if (!offeredOwned) {
-    return res.status(400).json({ error: 'You do not own this cat to trade!' });
+    if (listing.sellerPlayerId === player.id) {
+      return res.status(400).json({ success: false, error: 'Du kannst dein eigenes Angebot nicht kaufen!' });
+    }
+
+    if (player.coins < listing.priceCoins) {
+      return res.status(400).json({
+        success: false,
+        error: `Nicht genügend Münzen! Du benötigst ${listing.priceCoins.toLocaleString('de-DE')} Münzen.`,
+      });
+    }
+
+    // Deduct coins & add unique cat to buyer's collection
+    player.coins -= listing.priceCoins;
+    const now = new Date().toISOString();
+    player.ownedCats[listing.cat.id] = {
+      count: 1,
+      unlockedAt: now,
+      isFavorite: false,
+      customSkin: listing.cat,
+    };
+
+    // Credit seller if it's a real player in db
+    let sellerPlayer: PlayerData | null = null;
+    if (listing.sellerPlayerId) {
+      sellerPlayer = getPlayer(listing.sellerPlayerId);
+      if (sellerPlayer) {
+        sellerPlayer.coins = (sellerPlayer.coins || 0) + listing.priceCoins;
+        if (!sellerPlayer.stats) {
+          sellerPlayer.stats = {
+            gamesPlayed: 0,
+            gamesWon: 0,
+            tictactoeWins: 0,
+            tennisWins: 0,
+            chessWins: 0,
+            memoryWins: 0,
+            catCatchHighScore: 0,
+            chestsOpened: 0,
+            catsBought: 0,
+            keysBought: 0,
+            totalCoinsEarned: 500,
+            petCount: 0,
+          };
+        }
+        sellerPlayer.stats.totalCoinsEarned = (sellerPlayer.stats.totalCoinsEarned || 0) + listing.priceCoins;
+        savePlayer(sellerPlayer);
+      }
+    }
+
+    // Remove listing from store
+    removeMarketListing(listing.id);
+
+    // Save buyer
+    savePlayer(player);
+
+    // NOTIFY SELLER VIA TELEGRAM BOT API!
+    const targetTelegramId = listing.sellerTelegramId || sellerPlayer?.telegramUserId;
+    if (targetTelegramId) {
+      const buyerHandle = player.telegramUsername ? `@${player.telegramUsername}` : player.playerName;
+      const mintBadge = listing.cat.mintNumber ? ` (Mint #${listing.cat.mintNumber})` : '';
+      sendTelegramNotification(
+        targetTelegramId,
+        `🎉 <b>Katze auf dem Markt verkauft!</b>\n\n` +
+        `Spieler <b>${player.playerName}</b> (${buyerHandle}) hat deine Katze <b>${listing.cat.name}</b>${mintBadge} für <b>${listing.priceCoins.toLocaleString('de-DE')} Münzen</b> gekauft!\n\n` +
+        `💰 Die <b>+${listing.priceCoins.toLocaleString('de-DE')} Münzen</b> wurden deinem Konto gutgeschrieben.\n` +
+        `Öffne CatWorld, um neue Kisten oder Katzen zu sammeln! 🐾`
+      ).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      player,
+      boughtCat: listing.cat,
+      listings: getMarketListings(),
+      message: `Erfolg! ${listing.cat.name} gehört jetzt dir! 🎉`,
+    });
+  } catch (err: any) {
+    console.error('Error buying from market:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Kauf' });
   }
+});
 
-  // Active cat cannot be traded away
-  if (player.activeCatId === offeredCatId) {
-    return res.status(400).json({ error: 'Cannot trade your currently active cat! Equip a different cat first.' });
+// POST /api/market/trade (Cat-for-Cat swap & Telegram notification)
+apiRouter.post('/market/trade', async (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!player) return res.status(401).json({ success: false, error: 'Spieler nicht angemeldet' });
+
+    const { listingId, offeredCatId } = req.body;
+    const listings = getMarketListings();
+    const listing = listings.find(l => l.id === listingId);
+    if (!listing) return res.status(404).json({ success: false, error: 'Angebot nicht mehr verfügbar' });
+
+    if (listing.sellerPlayerId === player.id) {
+      return res.status(400).json({ success: false, error: 'Du kannst nicht mit deinem eigenen Angebot tauschen!' });
+    }
+
+    const offeredOwned = player.ownedCats[offeredCatId];
+    if (!offeredOwned) {
+      return res.status(400).json({ success: false, error: 'Du besitzt diese Katze zum Tauschen nicht!' });
+    }
+
+    if (player.activeCatId === offeredCatId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Du kannst deine ausgerüstete Katze nicht tauschen! Rüste zuerst eine andere aus.',
+      });
+    }
+
+    const offeredCatSkin = offeredOwned.customSkin || GET_CAT_BY_ID(offeredCatId);
+
+    // Transfer offered cat out of player
+    if (offeredOwned.count > 1) {
+      offeredOwned.count -= 1;
+    } else {
+      delete player.ownedCats[offeredCatId];
+    }
+
+    // Transfer received cat in
+    const now = new Date().toISOString();
+    player.ownedCats[listing.cat.id] = {
+      count: 1,
+      unlockedAt: now,
+      isFavorite: false,
+      customSkin: listing.cat,
+    };
+
+    // If seller is a registered player, credit them with the offered cat
+    let sellerPlayer: PlayerData | null = null;
+    if (listing.sellerPlayerId) {
+      sellerPlayer = getPlayer(listing.sellerPlayerId);
+      if (sellerPlayer) {
+        if (!sellerPlayer.ownedCats) sellerPlayer.ownedCats = {};
+        sellerPlayer.ownedCats[offeredCatSkin.id] = {
+          count: 1,
+          unlockedAt: now,
+          isFavorite: false,
+          customSkin: offeredCatSkin,
+        };
+        savePlayer(sellerPlayer);
+      }
+    }
+
+    // Remove old listing and add new listing with offered cat
+    removeMarketListing(listing.id);
+
+    // Save player
+    savePlayer(player);
+
+    // NOTIFY SELLER VIA TELEGRAM BOT!
+    const targetTelegramId = listing.sellerTelegramId || sellerPlayer?.telegramUserId;
+    if (targetTelegramId) {
+      const traderHandle = player.telegramUsername ? `@${player.telegramUsername}` : player.playerName;
+      sendTelegramNotification(
+        targetTelegramId,
+        `🔄 <b>Katzen-Tausch abgeschlossen!</b>\n\n` +
+        `Spieler <b>${player.playerName}</b> (${traderHandle}) hat deine Katze <b>${listing.cat.name}</b> gegen <b>${offeredCatSkin.name}</b> getauscht!\n\n` +
+        `Die neue Katze wurde zu deiner Sammlung hinzugefügt. 🐾`
+      ).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      player,
+      receivedCat: listing.cat,
+      tradedAway: offeredCatSkin,
+      listings: getMarketListings(),
+      message: `Tausch erfolgreich abgeschlossen! 🎉`,
+    });
+  } catch (err: any) {
+    console.error('Error executing trade:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Tausch' });
   }
+});
 
-  const offeredCatSkin = offeredOwned.customSkin || GET_CAT_BY_ID(offeredCatId);
+// ==========================================
+// ADMIN ENDPOINTS (EXCLUSIVE FOR TELEGRAM ID 8979248747)
+// ==========================================
 
-  // Transfer offered cat out
-  if (offeredOwned.count > 1) {
-    offeredOwned.count -= 1;
-  } else {
-    delete player.ownedCats[offeredCatId];
+// GET /api/admin/overview
+apiRouter.get('/admin/overview', (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!isUserAdmin(player, req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Zugriff verweigert. Diese Funktion ist exklusiv für Admin 8979248747.',
+      });
+    }
+
+    const allPlayers = getAllRegisteredPlayers();
+    const sanitizedPlayers = allPlayers.map(p => ({
+      id: p.id,
+      telegramUserId: p.telegramUserId,
+      telegramUsername: p.telegramUsername,
+      playerName: p.playerName,
+      coins: p.coins,
+      keys: p.keys || { wooden: 0, blue: 0, epic: 0, legendary: 0 },
+      catsCount: Object.keys(p.ownedCats || {}).length,
+      loginStreak: p.loginStreak || 1,
+      createdAt: p.createdAt,
+    }));
+
+    // Sort by coins descending
+    sanitizedPlayers.sort((a, b) => (b.coins || 0) - (a.coins || 0));
+
+    return res.json({
+      success: true,
+      isAdmin: true,
+      totalUsers: allPlayers.length,
+      players: sanitizedPlayers,
+      serverTime: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    console.error('Error fetching admin overview:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Laden der Admin-Daten' });
   }
+});
 
-  // Transfer received cat in
-  const now = new Date().toISOString();
-  player.ownedCats[listing.cat.id] = {
-    count: 1,
-    unlockedAt: now,
-    isFavorite: false,
-    customSkin: listing.cat,
-  };
+// POST /api/admin/grant-coins
+apiRouter.post('/admin/grant-coins', (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!isUserAdmin(player, req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Zugriff verweigert. Diese Funktion ist exklusiv für Admin 8979248747.',
+      });
+    }
 
-  // Replace listing with offered cat
-  MARKET_LISTINGS[index] = {
-    id: `listing-trade-${Date.now()}`,
-    sellerName: player.playerName,
-    sellerTelegram: player.telegramUsername,
-    cat: offeredCatSkin,
-    priceCoins: offeredCatSkin.price,
-    wantsRarity: listing.cat.rarity,
-    createdAt: Date.now(),
-  };
+    const { targetPlayerId, amount } = req.body;
+    const addCoins = Math.floor(Number(amount));
+    if (isNaN(addCoins) || addCoins === 0) {
+      return res.status(400).json({ success: false, error: 'Ungültiger Münzbetrag' });
+    }
 
-  savePlayer(player);
-  res.json({
-    success: true,
-    player,
-    receivedCat: listing.cat,
-    tradedAway: offeredCatSkin,
-    listings: MARKET_LISTINGS,
-  });
+    let target = getPlayer(targetPlayerId);
+    if (!target) {
+      // If targetPlayerId matches admin id or current session, recover target
+      if (player && (player.id === targetPlayerId || targetPlayerId === 'CW-TG-8979248747')) {
+        target = player;
+      } else {
+        target = getOrCreatePlayer(targetPlayerId);
+      }
+    }
+
+    target.coins = Math.max(0, (target.coins || 0) + addCoins);
+    if (!target.stats) {
+      target.stats = {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        tictactoeWins: 0,
+        tennisWins: 0,
+        chessWins: 0,
+        memoryWins: 0,
+        catCatchHighScore: 0,
+        chestsOpened: 0,
+        catsBought: 0,
+        keysBought: 0,
+        totalCoinsEarned: 500,
+        petCount: 0,
+      };
+    }
+    if (addCoins > 0) {
+      target.stats.totalCoinsEarned = (target.stats.totalCoinsEarned || 0) + addCoins;
+    }
+
+    savePlayer(target);
+
+    // If target has a telegram id and is not the admin themselves, optionally notify them
+    if (target.telegramUserId && target.telegramUserId !== 8979248747 && addCoins > 0) {
+      sendTelegramNotification(
+        target.telegramUserId,
+        `🎁 <b>Münzen vom Admin erhalten!</b>\n\n` +
+        `Der Spielleiter hat deinem CatWorld-Konto <b>+${addCoins.toLocaleString('de-DE')} Münzen</b> gutgeschrieben! 🪙✨\n\n` +
+        `Viel Spaß beim Kisten-Öffnen!`
+      ).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      message: `${addCoins > 0 ? '+' : ''}${addCoins.toLocaleString('de-DE')} Münzen erfolgreich an ${target.playerName} (${target.id}) vergeben!`,
+      targetPlayer: target,
+      grantedAmount: addCoins,
+    });
+  } catch (err: any) {
+    console.error('Error granting coins in admin panel:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Vergeben der Münzen' });
+  }
 });

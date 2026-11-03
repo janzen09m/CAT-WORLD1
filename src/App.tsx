@@ -12,7 +12,7 @@ import {
   loadAchievementsFromTelegramCloud,
   triggerHaptic,
 } from './utils/telegram';
-import { CHESTS_CONFIG } from './data/chestsData';
+import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from './data/chestsData';
 import { generateUniqueCat } from './utils/catGenerator';
 import { TELEGRAM_STARS_BUNDLES } from './data/starsBundles';
 import { soundManager } from './utils/audio';
@@ -23,6 +23,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { ConvertKeysModal } from './components/ConvertKeysModal';
 import { TelegramBotModal } from './components/TelegramBotModal';
 import { TradingMarketModal } from './components/TradingMarketModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
 
 import { HomeView } from './components/views/HomeView';
 import { CatsCollectionView } from './components/views/CatsCollectionView';
@@ -39,6 +40,7 @@ export default function App() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showTelegramModal, setShowTelegramModal] = useState(false);
   const [showTradingModal, setShowTradingModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -490,11 +492,48 @@ export default function App() {
   };
 
   const handleBuyKey = async (keyType: KeyType, amount: number = 1) => {
-    await apiRequest('/api/shop/buy-key', { keyType, amount });
+    const qty = Math.max(1, Math.floor(amount || 1));
+    const rate = KEY_EXCHANGE_RATES[keyType];
+    const totalCost = rate ? rate.coinPrice * qty : 0;
+
+    if (player && player.coins < totalCost) {
+      throw new Error(`Nicht genügend Münzen für ${qty}x ${rate?.name || keyType}!`);
+    }
+
+    // Optimistic local state update so key buying is instant and never blocks
+    if (player && rate) {
+      const updatedKeys = {
+        ...player.keys,
+        [keyType]: (player.keys?.[keyType] || 0) + qty,
+      };
+      const updatedPlayer: PlayerData = {
+        ...player,
+        coins: Math.max(0, player.coins - totalCost),
+        keys: updatedKeys,
+        stats: {
+          ...player.stats,
+          keysBought: (player.stats?.keysBought || 0) + qty,
+          coinsSpent: (player.stats?.coinsSpent || 0) + totalCost,
+        },
+      };
+      setPlayer(updatedPlayer);
+      try {
+        localStorage.setItem(`catworld_player_cache_${updatedPlayer.id}`, JSON.stringify(updatedPlayer));
+      } catch {}
+    }
+
+    try {
+      const res = await apiRequest('/api/shop/buy-key', { keyType, amount: qty });
+      if (res?.player) {
+        setPlayer(res.player);
+      }
+    } catch (err: any) {
+      console.warn('Server key sync warning, using local state:', err);
+    }
   };
 
   const handleBuyKeysModal = async (keyType: KeyType, amount: number) => {
-    await apiRequest('/api/shop/buy-key', { keyType, amount });
+    return handleBuyKey(keyType, amount);
   };
 
   const handleCompleteGame = async (
@@ -624,6 +663,16 @@ export default function App() {
     player.achievements.filter(a => !a.claimed && a.unlocked).length +
     (!player.dailyLoginClaimedToday ? 1 : 0);
 
+  const tgUser = getTelegramUser();
+  const isAdmin = Boolean(
+    tgUser?.id === 8979248747 ||
+    String(tgUser?.id) === '8979248747' ||
+    player?.telegramUserId === 8979248747 ||
+    String(player?.telegramUserId) === '8979248747' ||
+    player?.id === 'CW-TG-8979248747' ||
+    player?.id === '8979248747'
+  );
+
   return (
     <div className={`min-h-screen flex justify-center transition-colors duration-200 ${
       isLight ? 'bg-slate-100 text-slate-800' : 'bg-slate-950 text-slate-100'
@@ -643,6 +692,8 @@ export default function App() {
           onToggleTheme={handleToggleTheme}
           onOpenTelegramBotModal={() => setShowTelegramModal(true)}
           onOpenProfile={() => setActiveTab('profile')}
+          isAdmin={isAdmin}
+          onOpenAdminPanel={() => setShowAdminModal(true)}
         />
 
         {/* Main Content Area */}
@@ -710,6 +761,8 @@ export default function App() {
               onClaimAchievement={handleClaimAchievement}
               theme={theme}
               onToggleTheme={handleToggleTheme}
+              isAdmin={isAdmin}
+              onOpenAdminPanel={() => setShowAdminModal(true)}
             />
           )}
         </main>
@@ -756,6 +809,16 @@ export default function App() {
             player={player}
             onClose={() => setShowTradingModal(false)}
             onTradeSuccess={updatedPlayer => setPlayer(updatedPlayer)}
+            theme={theme}
+          />
+        )}
+
+        {/* Exclusive Admin Panel Modal (Telegram User ID 8979248747) */}
+        {showAdminModal && (
+          <AdminPanelModal
+            player={player}
+            onClose={() => setShowAdminModal(false)}
+            onCoinsUpdated={updated => setPlayer(updated)}
             theme={theme}
           />
         )}
