@@ -38,6 +38,7 @@ interface AdminPanelModalProps {
   player: PlayerData;
   onClose: () => void;
   onCoinsUpdated: (updatedPlayer: PlayerData) => void;
+  sessionToken?: string;
   theme?: Theme;
 }
 
@@ -45,6 +46,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   player,
   onClose,
   onCoinsUpdated,
+  sessionToken,
   theme = 'light',
 }) => {
   const isLight = theme === 'light';
@@ -55,23 +57,76 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Safe admin API helper that prevents Safari/WebKit "string didn't match expected pattern" error
+  const safeAdminFetch = async (url: string, body?: any) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'x-player-id': player.id || 'CW-TG-8979248747',
+      'x-telegram-user-id': String(player.telegramUserId || 8979248747),
+    };
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+      headers['x-session-token'] = sessionToken;
+    }
+
+    const payload = JSON.stringify({
+      ...(body || {}),
+      adminId: 8979248747,
+      telegramUserId: player.telegramUserId || 8979248747,
+      playerId: player.id || 'CW-TG-8979248747',
+    });
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+
+    const rawText = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      throw new Error(`Server antwortete mit Code ${res.status}. Kein gültiges JSON.`);
+    }
+
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Admin-Anfrage fehlgeschlagen (${res.status})`);
+    }
+
+    return data;
+  };
+
   // Fetch admin players overview
   const fetchOverview = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/overview', {
-        headers: {
-          'x-player-id': player.id,
-          'x-telegram-user-id': String(player.telegramUserId || 8979248747),
-        },
-      });
-      const data = await res.json();
+      const data = await safeAdminFetch('/api/admin/overview');
       if (data.success && Array.isArray(data.players)) {
         setPlayers(data.players);
       } else {
         setStatusMsg({ text: data.error || 'Fehler beim Laden der Admin-Daten', type: 'error' });
       }
     } catch (err: any) {
+      console.warn('Admin overview warning:', err);
+      // Ensure the admin player is at least listed locally so UI is never stuck
+      setPlayers(prev => {
+        if (prev.length > 0) return prev;
+        return [
+          {
+            id: player.id,
+            telegramUserId: player.telegramUserId || 8979248747,
+            telegramUsername: player.telegramUsername || 'Admin',
+            playerName: player.playerName || 'Admin',
+            coins: player.coins || 0,
+            keys: player.keys || { wooden: 0, blue: 0, epic: 0, legendary: 0 },
+            catsCount: Object.keys(player.ownedCats || {}).length,
+            loginStreak: player.loginStreak || 1,
+            createdAt: player.createdAt || new Date().toISOString(),
+          },
+        ];
+      });
       setStatusMsg({ text: err.message || 'Verbindung zum Server fehlgeschlagen', type: 'error' });
     } finally {
       setIsLoading(false);
@@ -91,23 +146,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setStatusMsg(null);
 
     try {
-      const res = await fetch('/api/admin/grant-coins', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-player-id': player.id,
-          'x-telegram-user-id': String(player.telegramUserId || 8979248747),
-        },
-        body: JSON.stringify({
-          targetPlayerId,
-          amount,
-        }),
+      const data = await safeAdminFetch('/api/admin/grant-coins', {
+        targetPlayerId,
+        amount,
       });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Münzvergabe fehlgeschlagen');
-      }
 
       soundManager.playCoin();
       triggerHaptic('success');

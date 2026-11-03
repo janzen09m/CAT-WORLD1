@@ -432,63 +432,36 @@ export default function App() {
     const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
     if (!bundle) throw new Error('Ungültiges Paket');
 
-    try {
-      const res = await apiRequest('/api/stars/create-invoice', { bundleId });
-      if (res.invoiceUrl && typeof window !== 'undefined' && typeof window.Telegram?.WebApp?.openInvoice === 'function') {
-        return new Promise<void>((resolve, reject) => {
-          window.Telegram!.WebApp!.openInvoice!(res.invoiceUrl, async (status: string) => {
-            if (status === 'paid') {
-              try {
-                await apiRequest('/api/stars/claim-purchase', { bundleId });
-                resolve();
-              } catch {
-                if (player) {
-                  const updated: PlayerData = {
-                    ...player,
-                    coins: player.coins + bundle.coins,
-                    stats: {
-                      ...player.stats,
-                      totalCoinsEarned: (player.stats.totalCoinsEarned || 0) + bundle.coins,
-                    },
-                  };
-                  setPlayer(updated);
-                  try {
-                    localStorage.setItem(`catworld_player_cache_${updated.id}`, JSON.stringify(updated));
-                  } catch {}
-                }
-                resolve();
-              }
-            } else if (status === 'cancelled') {
-              reject(new Error('Zahlung abgebrochen'));
-            } else {
-              reject(new Error(`Zahlungsstatus: ${status}`));
-            }
-          });
-        });
-      } else {
-        // Direct simulation mode or instant claim
-        await apiRequest('/api/stars/claim-purchase', { bundleId });
-      }
-    } catch (err: any) {
-      console.warn('Stars purchase server call failed, resolving safely:', err);
-      // Fallback: Credit coins directly so user is never blocked by server 500 error!
-      if (player) {
-        const updated: PlayerData = {
-          ...player,
-          coins: player.coins + bundle.coins,
-          stats: {
-            ...player.stats,
-            totalCoinsEarned: (player.stats.totalCoinsEarned || 0) + bundle.coins,
-          },
-        };
-        setPlayer(updated);
-        try {
-          localStorage.setItem(`catworld_player_cache_${updated.id}`, JSON.stringify(updated));
-        } catch {}
-        return;
-      }
-      throw err;
+    const res = await apiRequest('/api/stars/create-invoice', { bundleId });
+    if (!res || !res.invoiceUrl) {
+      throw new Error(
+        res?.error ||
+          'Keine Telegram Stars Rechnungs-URL erhalten. Bitte stelle sicher, dass BOT_TOKEN auf dem Server konfiguriert ist.'
+      );
     }
+
+    if (typeof window === 'undefined' || typeof window.Telegram?.WebApp?.openInvoice !== 'function') {
+      throw new Error('Telegram Stars Zahlungen können nur direkt in der offiziellen Telegram App durchgeführt werden.');
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      window.Telegram!.WebApp!.openInvoice!(res.invoiceUrl, async (status: string) => {
+        if (status === 'paid') {
+          try {
+            await apiRequest('/api/stars/claim-purchase', { bundleId });
+            resolve();
+          } catch (claimErr: any) {
+            reject(new Error(claimErr?.message || 'Zahlung bestätigt, Fehler bei der Münzgutschrift.'));
+          }
+        } else if (status === 'cancelled') {
+          reject(new Error('Zahlung abgebrochen. Es wurden keine Stars abgebucht und keine Münzen gutgeschrieben.'));
+        } else if (status === 'failed') {
+          reject(new Error('Zahlung über Telegram Stars fehlgeschlagen.'));
+        } else {
+          reject(new Error(`Zahlungsstatus: ${status || 'abgebrochen'}`));
+        }
+      });
+    });
   };
 
   const handleBuyKey = async (keyType: KeyType, amount: number = 1) => {
@@ -817,6 +790,7 @@ export default function App() {
         {showAdminModal && (
           <AdminPanelModal
             player={player}
+            sessionToken={sessionToken}
             onClose={() => setShowAdminModal(false)}
             onCoinsUpdated={updated => setPlayer(updated)}
             theme={theme}
