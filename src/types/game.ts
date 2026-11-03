@@ -68,6 +68,7 @@ export interface ChestConfig {
   borderColor: string;
   keyRequired: KeyType;
   coinPrice: number;
+  image?: string;
   dropRates: {
     common: number;
     uncommon: number;

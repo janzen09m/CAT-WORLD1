@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PlayerData, ChestConfig, CatSkin, Theme } from '../../types/game';
-import { CHESTS_CONFIG } from '../../data/chestsData';
+import { CHESTS_CONFIG, CHEST_IMAGES } from '../../data/chestsData';
 import { ChestOpenModal } from '../ChestOpenModal';
 import { soundManager } from '../../utils/audio';
 import { Key, Sparkles, History, ShoppingCart } from 'lucide-react';
@@ -99,10 +99,15 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
             >
               {/* Chest Icon / Graphic */}
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0 shadow-inner"
-                style={{ backgroundColor: `${chest.color}20`, border: `1.5px solid ${chest.color}` }}
+                className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-md overflow-hidden p-1.5 transition-transform hover:scale-105"
+                style={{ backgroundColor: `${chest.color}20`, border: `1.5px solid ${chest.color}60` }}
               >
-                {chest.id === 'wooden' ? '🛒' : chest.id === 'blue' ? '💎' : chest.id === 'epic' ? '🔮' : '👑'}
+                <img
+                  src={chest.image || CHEST_IMAGES[chest.id]}
+                  alt={chest.name}
+                  className="w-full h-full object-contain rounded-xl drop-shadow-sm select-none"
+                  loading="lazy"
+                />
               </div>
 
               {/* Chest Info */}
@@ -175,7 +180,13 @@ export const ChestsView: React.FC<ChestsViewProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base shrink-0">🎁</span>
+                    <div className="w-6 h-6 rounded-lg overflow-hidden shrink-0 border border-slate-700/30 p-0.5 bg-slate-900/40 flex items-center justify-center">
+                      <img
+                        src={CHEST_IMAGES[entry.chestId as keyof typeof CHEST_IMAGES] || CHEST_IMAGES.wooden}
+                        alt={entry.chestId}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
                     <div className="min-w-0">
                       <div className={`font-bold truncate flex items-center gap-1 ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
                         <span>{entry.catName}</span>

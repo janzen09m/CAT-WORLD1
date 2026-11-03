@@ -5,7 +5,7 @@ import { soundManager } from '../../utils/audio';
 import { triggerHaptic } from '../../utils/telegram';
 import { Sparkles, Calendar, Check, ArrowRight, Play, Trophy, Gift, Compass, Key } from 'lucide-react';
 import { TabType } from '../BottomNav';
-import { KEY_EXCHANGE_RATES } from '../../data/chestsData';
+import { KEY_EXCHANGE_RATES, CHEST_IMAGES } from '../../data/chestsData';
 
 interface HomeViewProps {
   player: PlayerData;
@@ -248,7 +248,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
           }`}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-2xl group-hover:scale-110 transition-transform">📦</span>
+            <div className="w-8 h-8 rounded-lg overflow-hidden p-0.5 bg-amber-500/10 border border-amber-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <img
+                src={CHEST_IMAGES.legendary}
+                alt="Kiste"
+                className="w-full h-full object-contain"
+              />
+            </div>
             <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
               isLight
                 ? 'bg-amber-100 text-amber-800 border-amber-300'

@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import { ChestConfig, CatSkin, PlayerData, Theme } from '../types/game';
 import { CatIllustration } from './CatIllustration';
 import { RARITY_CONFIG } from '../data/catsData';
-import { KEY_EXCHANGE_RATES } from '../data/chestsData';
+import { KEY_EXCHANGE_RATES, CHEST_IMAGES } from '../data/chestsData';
 import { soundManager } from '../utils/audio';
 import { triggerHaptic } from '../utils/telegram';
 import { Sparkles, X, Key, Check } from 'lucide-react';
@@ -121,10 +121,14 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
             {/* Chest Graphic */}
             <div className="relative inline-block py-2">
               <div
-                className="w-24 h-24 rounded-2xl mx-auto flex items-center justify-center text-5xl shadow-xl transition-transform hover:scale-105"
+                className="w-28 h-28 rounded-2xl mx-auto flex items-center justify-center shadow-xl transition-transform hover:scale-105 p-1.5 overflow-hidden"
                 style={{ backgroundColor: `${chest.color}25`, border: `2px solid ${chest.color}` }}
               >
-                📦
+                <img
+                  src={chest.image || CHEST_IMAGES[chest.id]}
+                  alt={chest.name}
+                  className="w-full h-full object-contain rounded-xl drop-shadow-md select-none"
+                />
               </div>
               <span className="absolute -top-1 -right-1 text-amber-400 animate-spin text-sm">✦</span>
             </div>
@@ -242,11 +246,15 @@ export const ChestOpenModal: React.FC<ChestOpenModalProps> = ({
 
         {/* --- STATE 2: OPENING ANIMATION --- */}
         {openingState === 'opening' && (
-          <div className="py-12 text-center space-y-6">
+          <div className="py-10 text-center space-y-6">
             <div className="relative inline-block">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-pink-500 to-amber-400 blur-2xl opacity-75 animate-ping" />
-              <div className="text-7xl animate-bounce select-none">
-                ✨📦✨
+              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-amber-400 blur-2xl opacity-75 animate-ping" />
+              <div className="w-28 h-28 mx-auto relative animate-bounce select-none">
+                <img
+                  src={chest.image || CHEST_IMAGES[chest.id]}
+                  alt={chest.name}
+                  className="w-full h-full object-contain drop-shadow-2xl"
+                />
               </div>
             </div>
             <div>

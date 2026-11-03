@@ -1,5 +1,12 @@
 import { ChestConfig, KeyType } from '../types/game';
 
+export const CHEST_IMAGES: Record<'wooden' | 'blue' | 'epic' | 'legendary', string> = {
+  wooden: '/assets/aistudio/IMG_4601_dbe040e8.jpeg',
+  blue: '/assets/aistudio/IMG_4602_1742ff6e.jpeg',
+  epic: '/assets/aistudio/IMG_4603_68456d10.jpeg',
+  legendary: '/assets/aistudio/IMG_4604_1aa31822.jpeg',
+};
+
 export const CHESTS_CONFIG: ChestConfig[] = [
   {
     id: 'wooden',
@@ -9,6 +16,7 @@ export const CHESTS_CONFIG: ChestConfig[] = [
     borderColor: 'border-amber-700',
     keyRequired: 'wooden',
     coinPrice: 150,
+    image: CHEST_IMAGES.wooden,
     dropRates: {
       common: 60,
       uncommon: 32,
@@ -27,6 +35,7 @@ export const CHESTS_CONFIG: ChestConfig[] = [
     borderColor: 'border-blue-600',
     keyRequired: 'blue',
     coinPrice: 600,
+    image: CHEST_IMAGES.blue,
     dropRates: {
       common: 10,
       uncommon: 45,
@@ -45,6 +54,7 @@ export const CHESTS_CONFIG: ChestConfig[] = [
     borderColor: 'border-purple-600',
     keyRequired: 'epic',
     coinPrice: 2500,
+    image: CHEST_IMAGES.epic,
     dropRates: {
       common: 0,
       uncommon: 15,
@@ -63,6 +73,7 @@ export const CHESTS_CONFIG: ChestConfig[] = [
     borderColor: 'border-amber-500',
     keyRequired: 'legendary',
     coinPrice: 8000,
+    image: CHEST_IMAGES.legendary,
     dropRates: {
       common: 0,
       uncommon: 0,
