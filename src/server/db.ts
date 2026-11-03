@@ -37,6 +37,7 @@ interface DatabaseStore {
   marketListings: TradeListing[];
   serverStartedAt: string;
   nextGlobalMintNumber?: number;
+  botToken?: string;
 }
 
 // In-memory cache
@@ -45,6 +46,7 @@ let memoryStore: DatabaseStore = {
   marketListings: [],
   serverStartedAt: new Date().toISOString(),
   nextGlobalMintNumber: 1,
+  botToken: undefined,
 };
 
 // Initialize PostgreSQL tables if pool is active
@@ -538,11 +540,36 @@ export function savePlayer(player: PlayerData): void {
   savePlayerToPg(player);
 }
 
+export function reloadStoreFromDiskIfNeeded(): void {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.players === 'object') {
+        memoryStore.players = { ...memoryStore.players, ...parsed.players };
+      }
+      if (parsed && Array.isArray(parsed.marketListings) && parsed.marketListings.length > 0) {
+        memoryStore.marketListings = parsed.marketListings;
+      }
+      if (parsed && parsed.botToken) {
+        memoryStore.botToken = parsed.botToken;
+      }
+      if (parsed && parsed.nextGlobalMintNumber) {
+        memoryStore.nextGlobalMintNumber = Math.max(memoryStore.nextGlobalMintNumber || 1, parsed.nextGlobalMintNumber);
+      }
+    }
+  } catch (e) {
+    // ignore read conflicts
+  }
+}
+
 export function getAllRegisteredPlayers(): PlayerData[] {
+  reloadStoreFromDiskIfNeeded();
   return Object.values(memoryStore.players || {});
 }
 
 export function getMarketListings(): TradeListing[] {
+  reloadStoreFromDiskIfNeeded();
   if (!Array.isArray(memoryStore.marketListings)) {
     memoryStore.marketListings = [];
   }
@@ -550,6 +577,7 @@ export function getMarketListings(): TradeListing[] {
 }
 
 export function addMarketListing(listing: TradeListing): void {
+  reloadStoreFromDiskIfNeeded();
   if (!Array.isArray(memoryStore.marketListings)) {
     memoryStore.marketListings = [];
   }
@@ -558,6 +586,7 @@ export function addMarketListing(listing: TradeListing): void {
 }
 
 export function removeMarketListing(listingId: string): TradeListing | null {
+  reloadStoreFromDiskIfNeeded();
   if (!Array.isArray(memoryStore.marketListings)) {
     memoryStore.marketListings = [];
     return null;
@@ -567,6 +596,30 @@ export function removeMarketListing(listingId: string): TradeListing | null {
   const [removed] = memoryStore.marketListings.splice(index, 1);
   saveToDisk();
   return removed;
+}
+
+export function getStoredBotToken(): string | undefined {
+  reloadStoreFromDiskIfNeeded();
+  return memoryStore.botToken;
+}
+
+export function setStoredBotToken(token: string): void {
+  memoryStore.botToken = token.trim();
+  saveToDisk();
+  if (pgPool) {
+    pgPool.query(
+      `INSERT INTO global_meta (key, value, updated_at) VALUES ('botToken', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [JSON.stringify(memoryStore.botToken)]
+    ).catch(() => {});
+  }
+}
+
+export function getPostgresStatus(): { isConnected: boolean; connectionStringPresent: boolean } {
+  return {
+    isConnected: Boolean(pgPool),
+    connectionStringPresent: Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL),
+  };
 }
 
 function checkDailyReset(player: PlayerData): void {

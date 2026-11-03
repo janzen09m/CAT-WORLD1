@@ -11,6 +11,9 @@ import {
   getMarketListings,
   addMarketListing,
   removeMarketListing,
+  getStoredBotToken,
+  setStoredBotToken,
+  getPostgresStatus,
 } from './db';
 import { CAT_SKINS, GET_CAT_BY_ID, getDuplicateCoinBonus } from '../data/catsData';
 import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from '../data/chestsData';
@@ -22,7 +25,7 @@ export const apiRouter = Router();
 
 // Send real-time notification to Telegram Bot user
 export async function sendTelegramNotification(telegramUserId: number | string | undefined, messageHtml: string): Promise<boolean> {
-  const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
+  const botToken = getStoredBotToken() || process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
   if (!botToken || !telegramUserId) {
     console.log(`[TelegramBot Notification] Skipped (botToken: ${Boolean(botToken)}, target: ${telegramUserId})`);
     return false;
@@ -664,11 +667,11 @@ apiRouter.post('/stars/create-invoice', async (req: Request, res: Response) => {
     const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
     if (!bundle) return res.status(400).json({ success: false, error: 'Ungültiges Stars-Paket' });
 
-    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
+    const botToken = getStoredBotToken() || process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
     if (!botToken) {
       return res.status(400).json({
         success: false,
-        error: 'Telegram Bot Token (BOT_TOKEN) ist auf dem Server noch nicht konfiguriert. Bitte hinterlege den BOT_TOKEN (vom @BotFather) in den Umgebungsvariablen, um echte Telegram Stars Zahlungen abzuwickeln.',
+        error: 'Telegram Bot Token (BOT_TOKEN) ist auf dem Server noch nicht konfiguriert. Der Admin (ID: 8979248747) kann den Bot-Token direkt in der Admin-Konsole hinterlegen, um echte Telegram Stars Zahlungen zu aktivieren.',
       });
     }
 

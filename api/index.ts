@@ -3,7 +3,18 @@ import { apiRouter } from '../src/server/api';
 
 const app = express();
 
-app.use(express.json());
+// Resilient JSON body parser: if Vercel serverless has already parsed req.body, bypass express.json
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.body && typeof req.body === 'object') {
+    return next();
+  }
+  express.json({ limit: '10mb' })(req, res, (err) => {
+    if (err) {
+      console.warn('express.json parse warning:', err);
+    }
+    next();
+  });
+});
 
 // Normalization middleware for Vercel Serverless routing
 app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -44,9 +55,15 @@ app.use((req: Request, res: Response) => {
 // Top-level 500 error handler: ALWAYS return JSON, never plain text or HTML
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled Vercel API Error:', err);
+  const errorMsg =
+    typeof err?.message === 'string'
+      ? err.message
+      : typeof err === 'string'
+      ? err
+      : 'Interner Serverfehler';
   res.status(500).json({
     success: false,
-    error: err?.message || 'Interner Serverfehler',
+    error: errorMsg,
   });
 });
 
