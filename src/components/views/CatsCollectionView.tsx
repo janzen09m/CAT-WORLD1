@@ -13,6 +13,8 @@ interface CatsCollectionViewProps {
   onToggleFavorite: (catId: string) => Promise<void>;
   onGoToShop: () => void;
   onOpenTradingMarket?: () => void;
+  onCatListed?: (updatedPlayer: PlayerData) => void;
+  sessionToken?: string;
   theme?: Theme;
 }
 
@@ -22,6 +24,8 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
   onToggleFavorite,
   onGoToShop,
   onOpenTradingMarket,
+  onCatListed,
+  sessionToken,
   theme = 'dark',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -325,6 +329,11 @@ export const CatsCollectionView: React.FC<CatsCollectionViewProps> = ({
           }}
           onToggleFavorite={onToggleFavorite}
           onGoToShop={onGoToShop}
+          onCatListed={updated => {
+            if (onCatListed) onCatListed(updated);
+            setInspectCat(null);
+          }}
+          sessionToken={sessionToken}
           theme={theme}
         />
       )}

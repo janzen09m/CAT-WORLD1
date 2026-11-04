@@ -272,7 +272,10 @@ export default function App() {
     }
 
     if (!res.ok || !data || !data.success) {
-      const errMsg = data?.error || (res.status === 401 ? 'Sitzung abgelaufen. Bitte Spiel neu laden.' : `Serverfehler (${res.status})`);
+      const errMsg =
+        typeof data?.error === 'object'
+          ? data?.error?.message || JSON.stringify(data.error)
+          : data?.error || (res.status === 401 ? 'Sitzung abgelaufen. Bitte Spiel neu laden.' : `Serverfehler (${res.status})`);
       throw new Error(errMsg);
     }
 
@@ -692,6 +695,8 @@ export default function App() {
               onToggleFavorite={handleToggleFavorite}
               onGoToShop={() => setActiveTab('shop')}
               onOpenTradingMarket={() => setShowTradingModal(true)}
+              onCatListed={updated => setPlayer(updated)}
+              sessionToken={sessionToken}
               theme={theme}
             />
           )}
@@ -780,6 +785,7 @@ export default function App() {
         {showTradingModal && (
           <TradingMarketModal
             player={player}
+            sessionToken={sessionToken}
             onClose={() => setShowTradingModal(false)}
             onTradeSuccess={updatedPlayer => setPlayer(updatedPlayer)}
             theme={theme}

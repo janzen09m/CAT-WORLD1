@@ -22,6 +22,7 @@ interface TradingMarketModalProps {
   player: PlayerData;
   onClose: () => void;
   onTradeSuccess: (updatedPlayer: PlayerData) => void;
+  sessionToken?: string;
   theme?: Theme;
 }
 
@@ -29,6 +30,7 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
   player,
   onClose,
   onTradeSuccess,
+  sessionToken,
   theme = 'dark',
 }) => {
   const isLight = theme === 'light';
@@ -46,18 +48,57 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Safe market fetch helper to prevent Safari/WebKit pattern error
+  const safeMarketApiCall = async (url: string, body?: any) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'x-player-id': player.id,
+      'x-telegram-user-id': String(player.telegramUserId || ''),
+    };
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+      headers['x-session-token'] = sessionToken;
+    }
+
+    const res = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const rawText = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      throw new Error(`Server antwortete mit Status ${res.status}.`);
+    }
+
+    if (!res.ok || !data?.success) {
+      const errMsg =
+        typeof data?.error === 'object'
+          ? data?.error?.message || JSON.stringify(data.error)
+          : data?.error || `Anfrage fehlgeschlagen (${res.status})`;
+      throw new Error(errMsg);
+    }
+
+    return data;
+  };
+
   // Fetch current market listings
-  const fetchListings = () => {
+  const fetchListings = async () => {
     setIsLoading(true);
-    fetch('/api/market/listings')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.listings)) {
-          setListings(data.listings);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+    try {
+      const data = await safeMarketApiCall('/api/market/listings');
+      if (data && Array.isArray(data.listings)) {
+        setListings(data.listings);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch market listings:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -88,19 +129,7 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
     setStatusMsg(null);
 
     try {
-      const res = await fetch('/api/market/buy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-player-id': player.id,
-          'x-telegram-user-id': String(player.telegramUserId || ''),
-        },
-        body: JSON.stringify({ listingId: listing.id }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Kauf fehlgeschlagen');
-      }
+      const data = await safeMarketApiCall('/api/market/buy', { listingId: listing.id });
 
       soundManager.playChestOpen();
       triggerHaptic('success');
@@ -113,7 +142,8 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
       onTradeSuccess(data.player);
       setSelectedListing(null);
     } catch (err: any) {
-      setStatusMsg({ text: err.message || 'Fehler beim Kauf der Katze', type: 'error' });
+      const errMsg = typeof err?.message === 'string' ? err.message : 'Fehler beim Kauf der Katze';
+      setStatusMsg({ text: errMsg, type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -140,23 +170,10 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
     setStatusMsg(null);
 
     try {
-      const res = await fetch('/api/market/list', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-player-id': player.id,
-          'x-telegram-user-id': String(player.telegramUserId || ''),
-        },
-        body: JSON.stringify({
-          catId: catToListId,
-          priceCoins: price,
-        }),
+      const data = await safeMarketApiCall('/api/market/list', {
+        catId: catToListId,
+        priceCoins: price,
       });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Einstellen auf dem Markt fehlgeschlagen');
-      }
 
       soundManager.playCoin();
       triggerHaptic('success');
@@ -172,7 +189,8 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
       setCatToListId('');
       setActiveTab('market');
     } catch (err: any) {
-      setStatusMsg({ text: err.message || 'Fehler beim Anbieten', type: 'error' });
+      const errMsg = typeof err?.message === 'string' ? err.message : 'Fehler beim Anbieten';
+      setStatusMsg({ text: errMsg, type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -188,22 +206,10 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
     setStatusMsg(null);
 
     try {
-      const res = await fetch('/api/market/trade', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-player-id': player.id,
-          'x-telegram-user-id': String(player.telegramUserId || ''),
-        },
-        body: JSON.stringify({
-          listingId: selectedListing.id,
-          offeredCatId: selectedOfferCatId,
-        }),
+      const data = await safeMarketApiCall('/api/market/trade', {
+        listingId: selectedListing.id,
+        offeredCatId: selectedOfferCatId,
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Tausch fehlgeschlagen');
-      }
 
       soundManager.playWinFanfare();
       triggerHaptic('success');
@@ -218,7 +224,8 @@ export const TradingMarketModal: React.FC<TradingMarketModalProps> = ({
       setSelectedOfferCatId('');
       setActiveTab('market');
     } catch (err: any) {
-      setStatusMsg({ text: err.message || 'Tausch fehlgeschlagen', type: 'error' });
+      const errMsg = typeof err?.message === 'string' ? err.message : 'Tausch fehlgeschlagen';
+      setStatusMsg({ text: errMsg, type: 'error' });
     } finally {
       setIsSubmitting(false);
     }

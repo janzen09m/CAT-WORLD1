@@ -57,6 +57,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Bot Token & Postgres configuration state
+  const [botTokenConfigured, setBotTokenConfigured] = useState(false);
+  const [maskedBotToken, setMaskedBotToken] = useState('');
+  const [postgresStatus, setPostgresStatus] = useState<{ isConnected: boolean; connectionStringPresent: boolean }>({
+    isConnected: false,
+    connectionStringPresent: false,
+  });
+  const [botTokenInput, setBotTokenInput] = useState('');
+  const [isSavingToken, setIsSavingToken] = useState(false);
+  const [showTokenConfig, setShowTokenConfig] = useState(false);
+
   // Safe admin API helper that prevents Safari/WebKit "string didn't match expected pattern" error
   const safeAdminFetch = async (url: string, body?: any) => {
     const headers: Record<string, string> = {
@@ -88,11 +99,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     try {
       data = JSON.parse(rawText);
     } catch {
-      throw new Error(`Server antwortete mit Code ${res.status}. Kein gültiges JSON.`);
+      throw new Error(`Server antwortete mit Code ${res.status}.`);
     }
 
     if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Admin-Anfrage fehlgeschlagen (${res.status})`);
+      const errMsg =
+        typeof data?.error === 'object'
+          ? data?.error?.message || JSON.stringify(data.error)
+          : data?.error || `Admin-Anfrage fehlgeschlagen (${res.status})`;
+      throw new Error(errMsg);
     }
 
     return data;
@@ -105,8 +120,19 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       const data = await safeAdminFetch('/api/admin/overview');
       if (data.success && Array.isArray(data.players)) {
         setPlayers(data.players);
+        if (typeof data.botTokenConfigured === 'boolean') {
+          setBotTokenConfigured(data.botTokenConfigured);
+          setMaskedBotToken(data.maskedBotToken || '');
+        }
+        if (data.postgresStatus) {
+          setPostgresStatus(data.postgresStatus);
+        }
       } else {
-        setStatusMsg({ text: data.error || 'Fehler beim Laden der Admin-Daten', type: 'error' });
+        const errText =
+          typeof data?.error === 'object'
+            ? data?.error?.message || JSON.stringify(data.error)
+            : data?.error || 'Fehler beim Laden der Admin-Daten';
+        setStatusMsg({ text: errText, type: 'error' });
       }
     } catch (err: any) {
       console.warn('Admin overview warning:', err);
@@ -127,7 +153,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           },
         ];
       });
-      setStatusMsg({ text: err.message || 'Verbindung zum Server fehlgeschlagen', type: 'error' });
+      const safeErrorMsg =
+        typeof err?.message === 'string'
+          ? err.message
+          : typeof err === 'string'
+          ? err
+          : 'Verbindung zum Server wird synchronisiert...';
+      setStatusMsg({ text: safeErrorMsg, type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -136,6 +168,34 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   useEffect(() => {
     fetchOverview();
   }, []);
+
+  // Save Bot Token
+  const handleSaveBotToken = async () => {
+    if (!botTokenInput.trim()) return;
+    setIsSavingToken(true);
+    setStatusMsg(null);
+    try {
+      const data = await safeAdminFetch('/api/admin/set-bot-token', {
+        token: botTokenInput.trim(),
+      });
+      soundManager.playCoin();
+      triggerHaptic('success');
+      setBotTokenConfigured(true);
+      setMaskedBotToken(`${botTokenInput.trim().slice(0, 6)}...${botTokenInput.trim().slice(-4)}`);
+      setBotTokenInput('');
+      setShowTokenConfig(false);
+      setStatusMsg({
+        text: '✓ Bot-Token gespeichert! Echte Telegram Stars Zahlungen und Benachrichtigungen sind jetzt aktiv.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      soundManager.playError();
+      const errMsg = typeof err?.message === 'string' ? err.message : 'Fehler beim Speichern';
+      setStatusMsg({ text: errMsg, type: 'error' });
+    } finally {
+      setIsSavingToken(false);
+    }
+  };
 
   // Grant coins
   const handleGrantCoins = async (targetPlayerId: string, amount: number) => {
@@ -278,6 +338,65 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 +{amt.toLocaleString('de-DE')} 🪙
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Telegram Stars & Bot Token Configuration Card */}
+        <div className={`p-2.5 rounded-2xl border mb-3 text-xs ${
+          isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-800 text-slate-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">⭐</span>
+              <span className="font-bold">Telegram Stars & Bot-Token:</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                botTokenConfigured
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+              }`}>
+                {botTokenConfigured ? `Aktiv (${maskedBotToken})` : 'Nicht hinterlegt'}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowTokenConfig(!showTokenConfig)}
+              className="text-[10px] text-amber-500 hover:underline font-bold"
+            >
+              {showTokenConfig ? 'Schließen' : '⚙️ Token eingeben'}
+            </button>
+          </div>
+
+          {showTokenConfig && (
+            <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in">
+              <p className="text-[10px] text-slate-400 mb-1.5">
+                Token von <b>@BotFather</b> einfügen, damit echte Telegram Stars Rechnungen erstellt und Nutzer im Bot benachrichtigt werden:
+              </p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="password"
+                  placeholder="123456789:ABCdefGHI..."
+                  value={botTokenInput}
+                  onChange={e => setBotTokenInput(e.target.value)}
+                  className={`flex-1 px-2.5 py-1.5 rounded-xl border text-xs font-mono outline-hidden ${
+                    isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                  }`}
+                />
+                <button
+                  onClick={handleSaveBotToken}
+                  disabled={isSavingToken || !botTokenInput.trim()}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50"
+                >
+                  {isSavingToken ? '...' : 'Speichern'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Database / Neon status indicator */}
+          <div className="mt-1.5 pt-1.5 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between text-[10px] text-slate-400">
+            <span>🐘 Neon.tech Postgres:</span>
+            <span className={postgresStatus.isConnected ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
+              {postgresStatus.isConnected ? 'Verbunden (Geteilte DB)' : 'Lokale DB (DATABASE_URL einrichten)'}
+            </span>
           </div>
         </div>
 

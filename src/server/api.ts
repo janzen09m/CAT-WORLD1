@@ -1251,11 +1251,17 @@ const handleAdminOverview = (req: Request, res: Response) => {
     // Sort by coins descending
     sanitizedPlayers.sort((a, b) => (b.coins || 0) - (a.coins || 0));
 
+    const currentBotToken = getStoredBotToken() || process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || '';
+    const maskedBotToken = currentBotToken ? `${currentBotToken.slice(0, 6)}...${currentBotToken.slice(-4)}` : '';
+
     return res.json({
       success: true,
       isAdmin: true,
       totalUsers: allPlayers.length,
       players: sanitizedPlayers,
+      botTokenConfigured: Boolean(currentBotToken),
+      maskedBotToken,
+      postgresStatus: getPostgresStatus(),
       serverTime: new Date().toISOString(),
     });
   } catch (err: any) {
@@ -1267,6 +1273,36 @@ const handleAdminOverview = (req: Request, res: Response) => {
 // Mount both GET and POST for maximum compatibility across environments & proxies
 apiRouter.get('/admin/overview', handleAdminOverview);
 apiRouter.post('/admin/overview', handleAdminOverview);
+
+// POST /api/admin/set-bot-token (Set bot token directly from Admin Panel for Stars & Notifications)
+apiRouter.post('/admin/set-bot-token', (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!isUserAdmin(player, req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Zugriff verweigert. Diese Funktion ist exklusiv für Admin 8979248747.',
+      });
+    }
+
+    const { token } = req.body;
+    if (!token || typeof token !== 'string' || token.trim().length < 15) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ungültiger Telegram Bot Token. Format: 123456789:ABCdef...',
+      });
+    }
+
+    setStoredBotToken(token.trim());
+    return res.json({
+      success: true,
+      message: 'Telegram Bot Token erfolgreich gespeichert! Echte Telegram Stars Zahlungen und Bot-Benachrichtigungen sind jetzt aktiv.',
+    });
+  } catch (err: any) {
+    console.error('Error setting bot token:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Speichern des Bot-Tokens' });
+  }
+});
 
 // POST /api/admin/grant-coins
 apiRouter.post('/admin/grant-coins', (req: Request, res: Response) => {
