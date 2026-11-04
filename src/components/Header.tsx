@@ -45,10 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
   const isLight = theme === 'light';
 
   return (
-    <header className={`sticky top-0 z-40 px-3 pb-2.5 border-b select-none backdrop-blur-md transition-all duration-200 ${
-      // Ample top padding in Telegram so native 'X Close' & '...' menu buttons never overlap
-      isInsideTelegram ? 'pt-14' : 'pt-3'
-    } ${
+    <header className={`sticky top-0 z-40 px-3 pt-2.5 pb-2.5 border-b select-none backdrop-blur-md transition-all duration-200 ${
       isLight
         ? 'bg-white/95 border-slate-200 text-slate-800 shadow-xs'
         : 'bg-slate-900/90 border-slate-800 text-white shadow-sm'

@@ -435,11 +435,12 @@ export default function App() {
     const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
     if (!bundle) throw new Error('Ungültiges Paket');
 
-    const res = await apiRequest('/api/stars/create-invoice', { bundleId });
+    const localToken = typeof window !== 'undefined' ? (localStorage.getItem('catworld_admin_bot_token') || undefined) : undefined;
+    const res = await apiRequest('/api/stars/create-invoice', { bundleId, botToken: localToken });
     if (!res || !res.invoiceUrl) {
       throw new Error(
         res?.error ||
-          'Keine Telegram Stars Rechnungs-URL erhalten. Bitte stelle sicher, dass BOT_TOKEN auf dem Server konfiguriert ist.'
+          'Keine Telegram Stars Rechnungs-URL erhalten. Bitte trage deinen Bot-Token in der Admin-Konsole ein.'
       );
     }
 

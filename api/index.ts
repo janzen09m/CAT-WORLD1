@@ -61,12 +61,34 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       : typeof err === 'string'
       ? err
       : 'Interner Serverfehler';
-  res.status(500).json({
-    success: false,
-    error: errorMsg,
-  });
+  if (!res.headersSent) {
+    res.status(500).json({
+      success: false,
+      error: errorMsg,
+    });
+  }
+});
+
+// Guard against unhandled rejections crashing the serverless container
+process.on('unhandledRejection', (reason) => {
+  console.warn('Unhandled rejection caught in serverless process:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception caught in serverless process:', err);
 });
 
 export default function handler(req: any, res: any) {
-  return app(req, res);
+  return new Promise<void>((resolve) => {
+    res.on('finish', resolve);
+    res.on('close', resolve);
+    try {
+      app(req, res);
+    } catch (err) {
+      console.error('Synchronous handler exception:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Serverfehler' });
+      }
+      resolve();
+    }
+  });
 }

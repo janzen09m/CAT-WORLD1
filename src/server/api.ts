@@ -667,11 +667,16 @@ apiRouter.post('/stars/create-invoice', async (req: Request, res: Response) => {
     const bundle = TELEGRAM_STARS_BUNDLES.find(b => b.id === bundleId);
     if (!bundle) return res.status(400).json({ success: false, error: 'Ungültiges Stars-Paket' });
 
-    const botToken = getStoredBotToken() || process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
+    const headerBotToken = (req.headers['x-bot-token'] as string) || (req.body?.botToken as string);
+    if (headerBotToken && headerBotToken.length > 15) {
+      setStoredBotToken(headerBotToken);
+    }
+
+    const botToken = headerBotToken || getStoredBotToken() || process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN;
     if (!botToken) {
       return res.status(400).json({
         success: false,
-        error: 'Telegram Bot Token (BOT_TOKEN) ist auf dem Server noch nicht konfiguriert. Der Admin (ID: 8979248747) kann den Bot-Token direkt in der Admin-Konsole hinterlegen, um echte Telegram Stars Zahlungen zu aktivieren.',
+        error: 'Telegram Bot Token (BOT_TOKEN) ist noch nicht konfiguriert. Der Admin (ID: 8979248747) kann den Bot-Token direkt in der Admin-Konsole hinterlegen, um echte Telegram Stars Zahlungen zu aktivieren.',
       });
     }
 

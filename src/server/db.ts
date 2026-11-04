@@ -7,10 +7,19 @@ import { INITIAL_DAILY_TASKS, INITIAL_ACHIEVEMENTS } from '../data/tasksAndAchie
 
 const { Pool } = pg;
 
+function getSafeDataDir(): string {
+  try {
+    if (fs.existsSync('/tmp')) {
+      const p = path.resolve('/tmp', 'catworld_data');
+      if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+      return p;
+    }
+  } catch {}
+  return path.resolve(process.cwd(), 'data');
+}
+
 const isVercel = Boolean(process.env.VERCEL);
-const DATA_DIR = isVercel
-  ? path.resolve('/tmp', 'catworld_data')
-  : path.resolve(process.cwd(), 'data');
+const DATA_DIR = getSafeDataDir();
 const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
 const BUNDLED_DB_FILE = path.resolve(process.cwd(), 'data', 'catworld_store.json');
 
@@ -25,6 +34,10 @@ if (connectionString) {
       ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
       max: 10,
       idleTimeoutMillis: 30000,
+    });
+    // Critical: Prevent unhandled error events from crashing the serverless runtime when Neon scales to zero or resets
+    pgPool.on('error', (err) => {
+      console.warn('🐘 PostgreSQL pool background warning (auto-handled):', err?.message || err);
     });
     console.log('🐘 PostgreSQL pool initialized successfully');
   } catch (err) {
