@@ -24,22 +24,29 @@ const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
 const BUNDLED_DB_FILE = path.resolve(process.cwd(), 'data', 'catworld_store.json');
 
 // PostgreSQL Connection Pool (for Vercel Postgres / Neon / Supabase / Cloud SQL)
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+let customPostgresUrl: string | null = null;
+const envConnectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 let pgPool: pg.Pool | null = null;
 
-if (connectionString) {
+function createPgPool(connStr: string): pg.Pool {
+  const pool = new Pool({
+    connectionString: connStr,
+    ssl: connStr.includes('localhost') ? false : { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
+  // Critical: Prevent unhandled error events from crashing the serverless runtime when Neon scales to zero or resets
+  pool.on('error', (err) => {
+    console.warn('🐘 PostgreSQL pool background warning (auto-handled):', err?.message || err);
+  });
+  return pool;
+}
+
+if (envConnectionString) {
   try {
-    pgPool = new Pool({
-      connectionString,
-      ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 30000,
-    });
-    // Critical: Prevent unhandled error events from crashing the serverless runtime when Neon scales to zero or resets
-    pgPool.on('error', (err) => {
-      console.warn('🐘 PostgreSQL pool background warning (auto-handled):', err?.message || err);
-    });
-    console.log('🐘 PostgreSQL pool initialized successfully');
+    pgPool = createPgPool(envConnectionString);
+    console.log('🐘 PostgreSQL pool initialized successfully from environment');
   } catch (err) {
     console.warn('PostgreSQL pool creation failed, falling back to local store:', err);
   }
@@ -51,6 +58,7 @@ interface DatabaseStore {
   serverStartedAt: string;
   nextGlobalMintNumber?: number;
   botToken?: string;
+  postgresUrl?: string;
 }
 
 // In-memory cache
@@ -60,6 +68,7 @@ let memoryStore: DatabaseStore = {
   serverStartedAt: new Date().toISOString(),
   nextGlobalMintNumber: 1,
   botToken: undefined,
+  postgresUrl: undefined,
 };
 
 // Initialize PostgreSQL tables if pool is active
@@ -421,7 +430,21 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
 }
 
 export function getPlayer(id: string): PlayerData | null {
-  const player = memoryStore.players[id];
+  let player: PlayerData | undefined = memoryStore.players[id];
+  if (!player) {
+    reloadStoreFromDiskIfNeeded();
+    player = memoryStore.players[id];
+  }
+
+  // If still not found and id is a Telegram-based ID, look up by telegramUserId or matching substring
+  if (!player && id.startsWith('CW-TG-')) {
+    const rawTgId = id.replace('CW-TG-', '');
+    const numTgId = parseInt(rawTgId, 10);
+    player = Object.values(memoryStore.players).find(
+      p => p.id === id || (numTgId && p.telegramUserId === numTgId) || String(p.telegramUserId) === rawTgId
+    );
+  }
+
   if (!player) return null;
 
   // Ensure starShards is 0 and stats keysBought exists
@@ -567,6 +590,17 @@ export function reloadStoreFromDiskIfNeeded(): void {
       if (parsed && parsed.botToken) {
         memoryStore.botToken = parsed.botToken;
       }
+      if (parsed && parsed.postgresUrl) {
+        memoryStore.postgresUrl = parsed.postgresUrl;
+        customPostgresUrl = parsed.postgresUrl;
+        // If not connected yet, auto-connect using stored url
+        if (!pgPool) {
+          try {
+            pgPool = createPgPool(parsed.postgresUrl);
+            initPgTables().catch(() => {});
+          } catch {}
+        }
+      }
       if (parsed && parsed.nextGlobalMintNumber) {
         memoryStore.nextGlobalMintNumber = Math.max(memoryStore.nextGlobalMintNumber || 1, parsed.nextGlobalMintNumber);
       }
@@ -628,11 +662,128 @@ export function setStoredBotToken(token: string): void {
   }
 }
 
-export function getPostgresStatus(): { isConnected: boolean; connectionStringPresent: boolean } {
+export function getPostgresStatus(): {
+  isConnected: boolean;
+  connectionStringPresent: boolean;
+  maskedUrl?: string;
+  source?: 'env' | 'custom' | 'none';
+} {
+  const url = customPostgresUrl || memoryStore.postgresUrl || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  let maskedUrl = '';
+  let source: 'env' | 'custom' | 'none' = 'none';
+
+  if (url) {
+    source = (customPostgresUrl || memoryStore.postgresUrl) ? 'custom' : 'env';
+    try {
+      const parsed = new URL(url);
+      maskedUrl = `${parsed.protocol}//${parsed.username ? parsed.username + '@' : ''}${parsed.host}${parsed.pathname}`;
+    } catch {
+      maskedUrl = url.length > 20 ? `${url.slice(0, 15)}...${url.slice(-8)}` : url;
+    }
+  }
+
   return {
     isConnected: Boolean(pgPool),
-    connectionStringPresent: Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL),
+    connectionStringPresent: Boolean(url),
+    maskedUrl,
+    source,
   };
+}
+
+export async function setPostgresConnectionString(rawUrl: string): Promise<{ success: boolean; message: string; userCount: number }> {
+  const url = rawUrl.trim();
+  if (!url || (!url.startsWith('postgres://') && !url.startsWith('postgresql://'))) {
+    throw new Error('Ungültige Postgres-URL. Muss mit postgresql:// oder postgres:// beginnen.');
+  }
+
+  const testPool = createPgPool(url);
+
+  // Test actual connection
+  const testClient = await testPool.connect();
+  try {
+    await testClient.query('SELECT 1;');
+  } finally {
+    testClient.release();
+  }
+
+  // Swap to new pool
+  if (pgPool) {
+    try {
+      await pgPool.end();
+    } catch {}
+  }
+  pgPool = testPool;
+  customPostgresUrl = url;
+  memoryStore.postgresUrl = url;
+
+  // Initialize tables in Neon Postgres
+  await initPgTables();
+
+  // Push all existing memory players to PostgreSQL
+  for (const player of Object.values(memoryStore.players)) {
+    savePlayerToPg(player);
+  }
+
+  // Load all players currently in PostgreSQL into memory
+  try {
+    const res = await testPool.query('SELECT id, data FROM players');
+    for (const row of res.rows) {
+      if (row.data && row.data.id) {
+        memoryStore.players[row.data.id] = row.data;
+      }
+    }
+  } catch {}
+
+  saveToDisk();
+
+  return {
+    success: true,
+    message: 'Erfolgreich mit Neon.tech PostgreSQL verbunden! Tabellen initialisiert und alle Spielerdaten synchronisiert.',
+    userCount: Object.keys(memoryStore.players).length,
+  };
+}
+
+export function syncPlayerProfile(profile: PlayerData): PlayerData {
+  if (!profile || !profile.id) {
+    throw new Error('Ungültiges Spielerprofil');
+  }
+  reloadStoreFromDiskIfNeeded();
+  const existing = memoryStore.players[profile.id];
+
+  if (existing) {
+    // Merge defensively: never lose higher coins or cats
+    const mergedCoins = Math.max(existing.coins || 0, profile.coins || 0);
+    const mergedOwnedCats = { ...(existing.ownedCats || {}), ...(profile.ownedCats || {}) };
+    const mergedKeys = {
+      wooden: Math.max(existing.keys?.wooden || 0, profile.keys?.wooden || 0),
+      blue: Math.max(existing.keys?.blue || 0, profile.keys?.blue || 0),
+      epic: Math.max(existing.keys?.epic || 0, profile.keys?.epic || 0),
+      legendary: Math.max(existing.keys?.legendary || 0, profile.keys?.legendary || 0),
+    };
+
+    const mergedPlayer: PlayerData = {
+      ...existing,
+      ...profile,
+      coins: mergedCoins,
+      ownedCats: mergedOwnedCats,
+      keys: mergedKeys,
+      activeCatId: profile.activeCatId && mergedOwnedCats[profile.activeCatId] ? profile.activeCatId : (existing.activeCatId || Object.keys(mergedOwnedCats)[0] || 'cat-01'),
+      stats: {
+        ...(existing.stats || {}),
+        ...(profile.stats || {}),
+        gamesWon: Math.max(existing.stats?.gamesWon || 0, profile.stats?.gamesWon || 0),
+        chessWins: Math.max(existing.stats?.chessWins || 0, profile.stats?.chessWins || 0),
+        chestsOpened: Math.max(existing.stats?.chestsOpened || 0, profile.stats?.chestsOpened || 0),
+        totalCoinsEarned: Math.max(existing.stats?.totalCoinsEarned || 0, profile.stats?.totalCoinsEarned || 0, mergedCoins),
+      },
+    };
+
+    savePlayer(mergedPlayer);
+    return mergedPlayer;
+  } else {
+    savePlayer(profile);
+    return profile;
+  }
 }
 
 function checkDailyReset(player: PlayerData): void {

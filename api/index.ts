@@ -3,9 +3,18 @@ import { apiRouter } from '../src/server/api';
 
 const app = express();
 
-// Resilient JSON body parser: if Vercel serverless has already parsed req.body, bypass express.json
+// Resilient JSON body parser: if Vercel serverless has already parsed req.body or stream is ended, bypass express.json
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.body && typeof req.body === 'object') {
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'string') {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {}
+    }
+    return next();
+  }
+  if ((req as any).readableEnded || (req as any)._readableState?.ended) {
+    req.body = {};
     return next();
   }
   express.json({ limit: '10mb' })(req, res, (err) => {
@@ -79,8 +88,18 @@ process.on('uncaughtException', (err) => {
 
 export default function handler(req: any, res: any) {
   return new Promise<void>((resolve) => {
-    res.on('finish', resolve);
-    res.on('close', resolve);
+    let resolved = false;
+    const finish = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve();
+      }
+    };
+    res.on('finish', finish);
+    res.on('close', finish);
+    // Timeout safeguard: never let container hang for more than 9 seconds
+    setTimeout(finish, 9000);
+
     try {
       app(req, res);
     } catch (err) {
@@ -88,7 +107,7 @@ export default function handler(req: any, res: any) {
       if (!res.headersSent) {
         res.status(500).json({ success: false, error: 'Serverfehler' });
       }
-      resolve();
+      finish();
     }
   });
 }

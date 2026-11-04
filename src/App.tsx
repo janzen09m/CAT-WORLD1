@@ -10,6 +10,8 @@ import {
   isTelegramWebApp,
   saveAchievementsToTelegramCloud,
   loadAchievementsFromTelegramCloud,
+  savePlayerToTelegramCloud,
+  loadPlayerFromTelegramCloud,
   triggerHaptic,
 } from './utils/telegram';
 import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from './data/chestsData';
@@ -148,6 +150,12 @@ export default function App() {
     // Stable player ID: In Telegram, always use CW-TG-<id> so state is NEVER reset
     const devPlayerId = tgUser?.id ? `CW-TG-${tgUser.id}` : getOrCreateLocalDevId();
 
+    // 1. Check Telegram CloudStorage first for cross-device sync!
+    let cloudPlayer: PlayerData | null = null;
+    try {
+      cloudPlayer = await loadPlayerFromTelegramCloud(tgUser?.id);
+    } catch {}
+
     try {
       const res = await fetch('/api/auth/init', {
         method: 'POST',
@@ -169,6 +177,37 @@ export default function App() {
           } catch {}
         }
 
+        // If cloudPlayer has higher progress (more coins or more cats), merge it defensively!
+        if (cloudPlayer) {
+          const cloudCatsCount = Object.keys(cloudPlayer.ownedCats || {}).length;
+          const currentCatsCount = Object.keys(currentPlayer.ownedCats || {}).length;
+          if ((cloudPlayer.coins || 0) > (currentPlayer.coins || 0) || cloudCatsCount > currentCatsCount) {
+            console.log('Restoring higher progress from Telegram CloudStorage for cross-device persistence');
+            currentPlayer = {
+              ...currentPlayer,
+              ...cloudPlayer,
+              coins: Math.max(currentPlayer.coins || 0, cloudPlayer.coins || 0),
+              ownedCats: { ...(currentPlayer.ownedCats || {}), ...(cloudPlayer.ownedCats || {}) },
+              keys: {
+                wooden: Math.max(currentPlayer.keys?.wooden || 0, cloudPlayer.keys?.wooden || 0),
+                blue: Math.max(currentPlayer.keys?.blue || 0, cloudPlayer.keys?.blue || 0),
+                epic: Math.max(currentPlayer.keys?.epic || 0, cloudPlayer.keys?.epic || 0),
+                legendary: Math.max(currentPlayer.keys?.legendary || 0, cloudPlayer.keys?.legendary || 0),
+              },
+            };
+            // Send back to server so DB has the updated record
+            fetch('/api/player/sync-profile', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-player-id': currentPlayer.id,
+                ...(data.sessionToken ? { Authorization: `Bearer ${data.sessionToken}` } : {}),
+              },
+              body: JSON.stringify({ profile: currentPlayer }),
+            }).catch(() => {});
+          }
+        }
+
         // Auto-load & merge achievements from Telegram CloudStorage
         try {
           const tgData = await loadAchievementsFromTelegramCloud();
@@ -187,8 +226,6 @@ export default function App() {
             });
             currentPlayer = { ...currentPlayer, achievements: mergedAchievements };
           }
-          // Ensure synced back to Telegram Cloud
-          saveAchievementsToTelegramCloud(currentPlayer.achievements, currentPlayer.stats).catch(() => {});
         } catch {
           // ignore
         }
@@ -199,6 +236,10 @@ export default function App() {
 
         setPlayer(currentPlayer);
         setCollectorValue(data.collectorValue || 0);
+
+        // Auto-save full profile to Telegram CloudStorage on init
+        savePlayerToTelegramCloud(currentPlayer).catch(() => {});
+        saveAchievementsToTelegramCloud(currentPlayer.achievements, currentPlayer.stats).catch(() => {});
 
         // Onboarding check: Never re-prompt if player already onboarded or customized their name
         const isAlreadyOnboarded =
@@ -212,13 +253,18 @@ export default function App() {
       }
     } catch (err: any) {
       console.warn('Game server sync delayed, booting resilient session:', err);
-      // Fallback: player never gets blocked by server connection errors
-      const fallback = createFallbackPlayer(devPlayerId);
+      // Fallback: If cloud player exists, use it! Otherwise create resilient starter
+      const fallback = cloudPlayer || createFallbackPlayer(devPlayerId);
       if (tgUser?.first_name || tgUser?.name) {
-        fallback.playerName = (tgUser.first_name || tgUser.name)!.slice(0, 25);
+        if (!fallback.playerName || fallback.playerName === 'Katzenfreund') {
+          fallback.playerName = (tgUser.first_name || tgUser.name)!.slice(0, 25);
+        }
       }
       setPlayer(fallback);
       setCollectorValue(0);
+
+      // Save to Telegram CloudStorage even in offline fallback mode
+      savePlayerToTelegramCloud(fallback).catch(() => {});
 
       const isFallbackOnboarded =
         Boolean(fallback.hasOnboarded) ||
@@ -284,7 +330,8 @@ export default function App() {
         localStorage.setItem(`catworld_player_cache_${data.player.id}`, JSON.stringify(data.player));
       } catch {}
       setPlayer(data.player);
-      // Auto-save all achievements to Telegram Cloud on every progress action
+      // Auto-save full player profile & achievements to Telegram Cloud on every action
+      savePlayerToTelegramCloud(data.player).catch(() => {});
       saveAchievementsToTelegramCloud(data.player.achievements, data.player.stats).catch(() => {});
     }
     return data;

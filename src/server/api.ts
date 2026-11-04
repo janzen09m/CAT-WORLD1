@@ -14,6 +14,8 @@ import {
   getStoredBotToken,
   setStoredBotToken,
   getPostgresStatus,
+  setPostgresConnectionString,
+  syncPlayerProfile,
 } from './db';
 import { CAT_SKINS, GET_CAT_BY_ID, getDuplicateCoinBonus } from '../data/catsData';
 import { CHESTS_CONFIG, KEY_EXCHANGE_RATES } from '../data/chestsData';
@@ -340,6 +342,29 @@ apiRouter.post('/player/set-room-bg', (req: Request, res: Response) => {
     savePlayer(player);
   }
   res.json({ success: true, player });
+});
+
+// POST /api/player/sync-profile
+// Enables instant cross-device profile restore from Telegram CloudStorage
+apiRouter.post('/player/sync-profile', (req: Request, res: Response) => {
+  try {
+    const { profile } = req.body;
+    if (!profile || typeof profile !== 'object' || !profile.id) {
+      return res.status(400).json({ success: false, error: 'Ungültiges Profil' });
+    }
+
+    const authPlayer = getAuthenticatedPlayer(req);
+    const targetId = profile.id;
+    if (authPlayer && authPlayer.id !== targetId && !isUserAdmin(authPlayer, req)) {
+      return res.status(403).json({ success: false, error: 'Nicht autorisiert' });
+    }
+
+    const merged = syncPlayerProfile(profile);
+    return res.json({ success: true, player: merged });
+  } catch (err: any) {
+    console.error('Error in /api/player/sync-profile:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Sync-Fehler' });
+  }
 });
 
 // POST /api/player/pet-cat
@@ -1306,6 +1331,41 @@ apiRouter.post('/admin/set-bot-token', (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Error setting bot token:', err);
     return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Speichern des Bot-Tokens' });
+  }
+});
+
+// POST /api/admin/set-database-url (Connect Neon.tech PostgreSQL directly from Admin Panel)
+apiRouter.post('/admin/set-database-url', async (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!isUserAdmin(player, req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Zugriff verweigert. Diese Funktion ist exklusiv für Admin 8979248747.',
+      });
+    }
+
+    const { url } = req.body;
+    if (!url || typeof url !== 'string' || url.trim().length < 15) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ungültige PostgreSQL-Verbindungs-URL. Format: postgresql://username:password@ep-xyz.neon.tech/neondb?sslmode=require',
+      });
+    }
+
+    const result = await setPostgresConnectionString(url.trim());
+    return res.json({
+      success: true,
+      message: result.message,
+      userCount: result.userCount,
+      postgresStatus: getPostgresStatus(),
+    });
+  } catch (err: any) {
+    console.error('Error connecting to Neon.tech PostgreSQL:', err);
+    return res.status(500).json({
+      success: false,
+      error: `Verbindung zu Neon.tech fehlgeschlagen: ${err?.message || 'Prüfe Hostname, Benutzer und Passwort'}`,
+    });
   }
 });
 

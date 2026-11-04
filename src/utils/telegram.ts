@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Achievement, PlayerStats } from '../types/game';
+import { Achievement, PlayerStats, PlayerData } from '../types/game';
 
 declare global {
   interface Window {
@@ -436,4 +435,59 @@ export function getOrCreateLocalDevId(): string {
     localStorage.setItem(KEY, devId);
   }
   return devId;
+}
+
+const TG_STORAGE_KEY_PLAYER_PROFILE = 'catworld_tg_player_profile_v2';
+
+/**
+ * Save complete player profile directly into Telegram CloudStorage.
+ * Guarantees cross-device synchronization for the same Telegram account!
+ */
+export async function savePlayerToTelegramCloud(player: PlayerData): Promise<boolean> {
+  if (!player || !player.id) return false;
+  try {
+    const serialized = JSON.stringify({
+      timestamp: Date.now(),
+      profile: player,
+    });
+    // Save to key specific to player if telegramUserId exists
+    const key = player.telegramUserId
+      ? `catworld_tg_profile_${player.telegramUserId}`
+      : TG_STORAGE_KEY_PLAYER_PROFILE;
+
+    // Always mirror to localStorage
+    try {
+      localStorage.setItem(key, serialized);
+      localStorage.setItem(`catworld_player_cache_${player.id}`, JSON.stringify(player));
+    } catch {}
+
+    const ok = await tgCloudSetItem(key, serialized);
+    return ok;
+  } catch (err) {
+    console.warn('[Telegram CloudStorage] Failed to save profile:', err);
+    return false;
+  }
+}
+
+/**
+ * Load complete player profile from Telegram CloudStorage.
+ */
+export async function loadPlayerFromTelegramCloud(telegramUserId?: number | string): Promise<PlayerData | null> {
+  try {
+    const key = telegramUserId
+      ? `catworld_tg_profile_${telegramUserId}`
+      : TG_STORAGE_KEY_PLAYER_PROFILE;
+
+    const raw = await tgCloudGetItem(key);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    const profile = parsed?.profile || parsed;
+    if (profile && profile.id && profile.ownedCats && typeof profile.coins === 'number') {
+      return profile as PlayerData;
+    }
+  } catch (err) {
+    console.warn('[Telegram CloudStorage] Failed to load profile:', err);
+  }
+  return null;
 }

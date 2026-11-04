@@ -60,13 +60,22 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   // Bot Token & Postgres configuration state
   const [botTokenConfigured, setBotTokenConfigured] = useState(false);
   const [maskedBotToken, setMaskedBotToken] = useState('');
-  const [postgresStatus, setPostgresStatus] = useState<{ isConnected: boolean; connectionStringPresent: boolean }>({
+  const [postgresStatus, setPostgresStatus] = useState<{
+    isConnected: boolean;
+    connectionStringPresent: boolean;
+    maskedUrl?: string;
+  }>({
     isConnected: false,
     connectionStringPresent: false,
   });
   const [botTokenInput, setBotTokenInput] = useState('');
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [showTokenConfig, setShowTokenConfig] = useState(false);
+
+  // Neon.tech Postgres state
+  const [dbUrlInput, setDbUrlInput] = useState('');
+  const [isConnectingDb, setIsConnectingDb] = useState(false);
+  const [showDbConfig, setShowDbConfig] = useState(false);
 
   // Safe admin API helper that prevents Safari/WebKit "string didn't match expected pattern" error
   const safeAdminFetch = async (url: string, body?: any) => {
@@ -157,13 +166,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           },
         ];
       });
-      const safeErrorMsg =
+      let rawMsg =
         typeof err?.message === 'string'
           ? err.message
           : typeof err === 'string'
           ? err
           : 'Verbindung zum Server wird synchronisiert...';
-      setStatusMsg({ text: safeErrorMsg, type: 'error' });
+      if (rawMsg.includes('A server error has occurred') || rawMsg.includes('500') || rawMsg.includes('504')) {
+        rawMsg = 'Serververbindung wird synchronisiert. Richte unten Neon.tech Postgres ein für permanente Cloud-Speicherung!';
+      }
+      setStatusMsg({ text: rawMsg, type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -215,6 +227,43 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       });
     } finally {
       setIsSavingToken(false);
+    }
+  };
+
+  // Save Neon.tech Database URL
+  const handleSaveDatabaseUrl = async () => {
+    if (!dbUrlInput.trim()) return;
+    setIsConnectingDb(true);
+    setStatusMsg(null);
+    const cleanUrl = dbUrlInput.trim();
+    try {
+      const data = await safeAdminFetch('/api/admin/set-database-url', {
+        url: cleanUrl,
+      });
+      soundManager.playWinFanfare();
+      triggerHaptic('success');
+      confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+      setPostgresStatus({
+        isConnected: true,
+        connectionStringPresent: true,
+        maskedUrl: data.postgresStatus?.maskedUrl || 'Neon.tech Postgres',
+      });
+      setDbUrlInput('');
+      setShowDbConfig(false);
+      setStatusMsg({
+        text: '✓ Neon.tech PostgreSQL erfolgreich verbunden! Tabellen sind aktiv und Daten werden jetzt dauerhaft online gespeichert.',
+        type: 'success',
+      });
+      fetchOverview();
+    } catch (err: any) {
+      soundManager.playError();
+      triggerHaptic('error');
+      setStatusMsg({
+        text: err.message || 'Verbindung zu Neon.tech fehlgeschlagen. Prüfe URL und Passwort.',
+        type: 'error',
+      });
+    } finally {
+      setIsConnectingDb(false);
     }
   };
 
@@ -412,12 +461,66 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
           )}
 
-          {/* Database / Neon status indicator */}
-          <div className="mt-1.5 pt-1.5 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between text-[10px] text-slate-400">
-            <span>🐘 Neon.tech Postgres:</span>
-            <span className={postgresStatus.isConnected ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
-              {postgresStatus.isConnected ? 'Verbunden (Geteilte DB)' : 'Lokale DB (DATABASE_URL einrichten)'}
-            </span>
+          {/* Database / Neon status indicator & Connection setup */}
+          <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">🐘</span>
+                <span className="font-bold">Neon.tech Postgres:</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    postgresStatus.isConnected
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  }`}
+                >
+                  {postgresStatus.isConnected
+                    ? 'Verbunden (Aktiv)'
+                    : 'Lokale DB (DATABASE_URL)'}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowDbConfig(!showDbConfig)}
+                className="text-[10px] text-amber-500 hover:underline font-bold"
+              >
+                {showDbConfig ? 'Schließen' : (postgresStatus.isConnected ? '⚙️ Ändern' : '🔌 Verbinden')}
+              </button>
+            </div>
+
+            {postgresStatus.maskedUrl && (
+              <div className="text-[10px] font-mono text-slate-400 mt-1 truncate">
+                Host: {postgresStatus.maskedUrl}
+              </div>
+            )}
+
+            {showDbConfig && (
+              <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in">
+                <p className="text-[10px] text-slate-400 mb-1.5 leading-relaxed">
+                  <b>Neon.tech Connection-String einfügen</b> (aus neon.tech Dashboard → Connection Details):
+                </p>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <input
+                    type="password"
+                    placeholder="postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require"
+                    value={dbUrlInput}
+                    onChange={e => setDbUrlInput(e.target.value)}
+                    className={`flex-1 px-2.5 py-1.5 rounded-xl border text-xs font-mono outline-hidden ${
+                      isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                    }`}
+                  />
+                  <button
+                    onClick={handleSaveDatabaseUrl}
+                    disabled={isConnectingDb || !dbUrlInput.trim()}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 shrink-0"
+                  >
+                    {isConnectingDb ? 'Prüfe...' : 'Verbinden'}
+                  </button>
+                </div>
+                <div className="text-[9px] text-slate-400 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
+                  💡 <b>Tipp:</b> Sobald hier oder in Vercel als <code>DATABASE_URL</code> hinterlegt, sind alle Katzen, Münzen und User permanent synchronisiert!
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
