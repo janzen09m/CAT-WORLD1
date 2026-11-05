@@ -28,10 +28,19 @@ let customPostgresUrl: string | null = null;
 const envConnectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 let pgPool: pg.Pool | null = null;
 
+function cleanConnectionString(raw: string): string {
+  let clean = raw.trim();
+  // Remove channel_binding parameter as node-postgres driver can fail on SASL channel_binding
+  clean = clean.replace(/([?&])channel_binding=[^&]*(&|$)/g, '$1');
+  clean = clean.replace(/[?&]$/, '');
+  return clean;
+}
+
 function createPgPool(connStr: string): pg.Pool {
+  const sanitized = cleanConnectionString(connStr);
   const pool = new Pool({
-    connectionString: connStr,
-    ssl: connStr.includes('localhost') ? false : { rejectUnauthorized: false },
+    connectionString: sanitized,
+    ssl: sanitized.includes('localhost') ? false : { rejectUnauthorized: false },
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
@@ -691,15 +700,30 @@ export function getPostgresStatus(): {
 }
 
 export async function setPostgresConnectionString(rawUrl: string): Promise<{ success: boolean; message: string; userCount: number }> {
-  const url = rawUrl.trim();
+  let url = rawUrl.trim();
   if (!url || (!url.startsWith('postgres://') && !url.startsWith('postgresql://'))) {
     throw new Error('Ungültige Postgres-URL. Muss mit postgresql:// oder postgres:// beginnen.');
   }
 
+  // Detect if user copied masked password with asterisks
+  if (url.includes('****') || url.includes('neondb_owner:***')) {
+    throw new Error('Im Link stehen noch Sternchen (***)! Klicke in Neon bei "Connection Details" zuerst auf "Show password" oder das Kopieren-Symbol, damit das echte Passwort im Link steht.');
+  }
+
+  url = cleanConnectionString(url);
   const testPool = createPgPool(url);
 
   // Test actual connection
-  const testClient = await testPool.connect();
+  let testClient: pg.PoolClient;
+  try {
+    testClient = await testPool.connect();
+  } catch (connErr: any) {
+    if (connErr?.message?.includes('password authentication failed')) {
+      throw new Error('Passwort falsch! Bitte stelle sicher, dass du in Neon bei "Connection Details" auf "Show password" klickst und das unmaskierte Kennwort kopierst.');
+    }
+    throw new Error(`Verbindungsaufbau fehlgeschlagen: ${connErr?.message || connErr}`);
+  }
+
   try {
     await testClient.query('SELECT 1;');
   } finally {

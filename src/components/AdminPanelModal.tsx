@@ -236,6 +236,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setIsConnectingDb(true);
     setStatusMsg(null);
     const cleanUrl = dbUrlInput.trim();
+    if (cleanUrl.includes('****') || cleanUrl.includes('neondb_owner:***')) {
+      soundManager.playError();
+      triggerHaptic('error');
+      setStatusMsg({
+        text: 'Achtung: Im Link stehen noch Sternchen (***)! Klicke in Neon bei "Connection Details" zuerst auf "Show password" oder das Kopieren-Symbol, damit das echte Passwort im Link steht.',
+        type: 'error',
+      });
+      return;
+    }
+
     try {
       const data = await safeAdminFetch('/api/admin/set-database-url', {
         url: cleanUrl,
@@ -500,11 +510,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 </p>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <input
-                    type="password"
-                    placeholder="postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require"
+                    type="text"
+                    placeholder="postgresql://neondb_owner:passwort@ep-xyz.neon.tech/neondb?sslmode=require"
                     value={dbUrlInput}
                     onChange={e => setDbUrlInput(e.target.value)}
-                    className={`flex-1 px-2.5 py-1.5 rounded-xl border text-xs font-mono outline-hidden ${
+                    className={`flex-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
                       isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
                     }`}
                   />
@@ -516,6 +526,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     {isConnectingDb ? 'Prüfe...' : 'Verbinden'}
                   </button>
                 </div>
+                {dbUrlInput.includes('***') && (
+                  <div className="text-[10px] text-rose-500 font-bold mb-1.5 bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/20">
+                    ⚠️ Achtung: Im Link stehen noch Sternchen (***)! Klicke in Neon bei „Connection Details“ zuerst auf das Auge „Show password“ oder das Kopieren-Symbol, damit das echte Passwort im Link steht.
+                  </div>
+                )}
                 <div className="text-[9px] text-slate-400 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
                   💡 <b>Tipp:</b> Sobald hier oder in Vercel als <code>DATABASE_URL</code> hinterlegt, sind alle Katzen, Münzen und User permanent synchronisiert!
                 </div>
