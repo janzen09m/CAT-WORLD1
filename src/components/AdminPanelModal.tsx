@@ -57,25 +57,28 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Bot Token & Postgres configuration state
+  // Bot Token state
   const [botTokenConfigured, setBotTokenConfigured] = useState(false);
   const [maskedBotToken, setMaskedBotToken] = useState('');
-  const [postgresStatus, setPostgresStatus] = useState<{
-    isConnected: boolean;
-    connectionStringPresent: boolean;
-    maskedUrl?: string;
-  }>({
-    isConnected: false,
-    connectionStringPresent: false,
-  });
   const [botTokenInput, setBotTokenInput] = useState('');
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [showTokenConfig, setShowTokenConfig] = useState(false);
 
-  // Neon.tech Postgres state
-  const [dbUrlInput, setDbUrlInput] = useState('');
-  const [isConnectingDb, setIsConnectingDb] = useState(false);
-  const [showDbConfig, setShowDbConfig] = useState(false);
+  // Cloudflare D1 SQL Database state
+  const [cloudflareStatus, setCloudflareStatus] = useState<{
+    isConnected: boolean;
+    accountId?: string;
+    databaseId?: string;
+    maskedToken?: string;
+  }>({
+    isConnected: false,
+  });
+  const [cfAccountIdInput, setCfAccountIdInput] = useState('');
+  const [cfDatabaseIdInput, setCfDatabaseIdInput] = useState('');
+  const [cfApiTokenInput, setCfApiTokenInput] = useState('');
+  const [isConnectingCf, setIsConnectingCf] = useState(false);
+  const [showCfConfig, setShowCfConfig] = useState(false);
+  const [showCfHelp, setShowCfHelp] = useState(false);
 
   // Safe admin API helper that prevents Safari/WebKit "string didn't match expected pattern" error
   const safeAdminFetch = async (url: string, body?: any) => {
@@ -137,8 +140,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           setBotTokenConfigured(data.botTokenConfigured);
           setMaskedBotToken(data.maskedBotToken || '');
         }
-        if (data.postgresStatus) {
-          setPostgresStatus(data.postgresStatus);
+        if (data.cloudflareStatus) {
+          setCloudflareStatus(data.cloudflareStatus);
+          if (data.cloudflareStatus.accountId && !cfAccountIdInput) {
+            setCfAccountIdInput(data.cloudflareStatus.accountId);
+          }
+          if (data.cloudflareStatus.databaseId && !cfDatabaseIdInput) {
+            setCfDatabaseIdInput(data.cloudflareStatus.databaseId);
+          }
         }
       } else {
         const errText =
@@ -173,7 +182,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           ? err
           : 'Verbindung zum Server wird synchronisiert...';
       if (rawMsg.includes('A server error has occurred') || rawMsg.includes('500') || rawMsg.includes('504')) {
-        rawMsg = 'Serververbindung wird synchronisiert. Richte unten Neon.tech Postgres ein für permanente Cloud-Speicherung!';
+        rawMsg = 'Serververbindung wird synchronisiert. Richte unten Cloudflare D1 ein für permanente Cloud-Speicherung!';
       }
       setStatusMsg({ text: rawMsg, type: 'error' });
     } finally {
@@ -230,38 +239,37 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  // Save Neon.tech Database URL
-  const handleSaveDatabaseUrl = async () => {
-    if (!dbUrlInput.trim()) return;
-    setIsConnectingDb(true);
-    setStatusMsg(null);
-    const cleanUrl = dbUrlInput.trim();
-    if (cleanUrl.includes('****') || cleanUrl.includes('neondb_owner:***')) {
-      soundManager.playError();
-      triggerHaptic('error');
+  // Save Cloudflare D1 Config
+  const handleSaveCloudflareD1 = async () => {
+    if (!cfAccountIdInput.trim() || !cfDatabaseIdInput.trim() || !cfApiTokenInput.trim()) {
       setStatusMsg({
-        text: 'Achtung: Im Link stehen noch Sternchen (***)! Klicke in Neon bei "Connection Details" zuerst auf "Show password" oder das Kopieren-Symbol, damit das echte Passwort im Link steht.',
+        text: 'Bitte alle 3 Felder ausfüllen: Account ID, Database ID und API Token.',
         type: 'error',
       });
       return;
     }
 
+    setIsConnectingCf(true);
+    setStatusMsg(null);
+
     try {
-      const data = await safeAdminFetch('/api/admin/set-database-url', {
-        url: cleanUrl,
+      const data = await safeAdminFetch('/api/admin/set-cloudflare-d1', {
+        accountId: cfAccountIdInput.trim(),
+        databaseId: cfDatabaseIdInput.trim(),
+        apiToken: cfApiTokenInput.trim(),
       });
       soundManager.playWinFanfare();
       triggerHaptic('success');
-      confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
-      setPostgresStatus({
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+      setCloudflareStatus({
         isConnected: true,
-        connectionStringPresent: true,
-        maskedUrl: data.postgresStatus?.maskedUrl || 'Neon.tech Postgres',
+        accountId: cfAccountIdInput.trim(),
+        databaseId: cfDatabaseIdInput.trim(),
+        maskedToken: cfApiTokenInput.trim().slice(0, 4) + '...' + cfApiTokenInput.trim().slice(-4),
       });
-      setDbUrlInput('');
-      setShowDbConfig(false);
+      setShowCfConfig(false);
       setStatusMsg({
-        text: '✓ Neon.tech PostgreSQL erfolgreich verbunden! Tabellen sind aktiv und Daten werden jetzt dauerhaft online gespeichert.',
+        text: '✓ Cloudflare D1 erfolgreich verbunden! Alle Katzen, Münzen und User sind jetzt in Cloudflare gespeichert.',
         type: 'success',
       });
       fetchOverview();
@@ -269,11 +277,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       soundManager.playError();
       triggerHaptic('error');
       setStatusMsg({
-        text: err.message || 'Verbindung zu Neon.tech fehlgeschlagen. Prüfe URL und Passwort.',
+        text: err?.message || 'Verbindung zu Cloudflare D1 fehlgeschlagen. Bitte IDs und Token prüfen.',
         type: 'error',
       });
     } finally {
-      setIsConnectingDb(false);
+      setIsConnectingCf(false);
     }
   };
 
@@ -471,68 +479,115 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
           )}
 
-          {/* Database / Neon status indicator & Connection setup */}
+          {/* Cloudflare D1 SQL Database Card */}
           <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5">
-                <span className="text-sm">🐘</span>
-                <span className="font-bold">Neon.tech Postgres:</span>
+                <span className="text-sm">☁️</span>
+                <span className="font-bold">Cloudflare D1:</span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                    postgresStatus.isConnected
+                    cloudflareStatus.isConnected
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                   }`}
                 >
-                  {postgresStatus.isConnected
+                  {cloudflareStatus.isConnected
                     ? 'Verbunden (Aktiv)'
-                    : 'Lokale DB (DATABASE_URL)'}
+                    : 'Noch nicht verbunden'}
                 </span>
               </div>
               <button
-                onClick={() => setShowDbConfig(!showDbConfig)}
+                onClick={() => setShowCfConfig(!showCfConfig)}
                 className="text-[10px] text-amber-500 hover:underline font-bold"
               >
-                {showDbConfig ? 'Schließen' : (postgresStatus.isConnected ? '⚙️ Ändern' : '🔌 Verbinden')}
+                {showCfConfig ? 'Schließen' : (cloudflareStatus.isConnected ? '⚙️ Ändern' : '🔌 Einrichten')}
               </button>
             </div>
 
-            {postgresStatus.maskedUrl && (
+            {cloudflareStatus.isConnected && cloudflareStatus.databaseId && (
               <div className="text-[10px] font-mono text-slate-400 mt-1 truncate">
-                Host: {postgresStatus.maskedUrl}
+                DB-ID: {cloudflareStatus.databaseId}
               </div>
             )}
 
-            {showDbConfig && (
-              <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in">
-                <p className="text-[10px] text-slate-400 mb-1.5 leading-relaxed">
-                  <b>Neon.tech Connection-String einfügen</b> (aus neon.tech Dashboard → Connection Details):
-                </p>
-                <div className="flex items-center gap-1.5 mb-1.5">
+            {showCfConfig && (
+              <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Cloudflare D1 Zugangsdaten:
+                  </p>
+                  <button
+                    onClick={() => setShowCfHelp(!showCfHelp)}
+                    className="text-[10px] text-sky-400 underline font-semibold"
+                  >
+                    {showCfHelp ? 'Anleitung ausblenden' : '📖 Wo finde ich das?'}
+                  </button>
+                </div>
+
+                {showCfHelp && (
+                  <div className="p-2.5 rounded-xl bg-sky-950/40 border border-sky-500/30 text-[10px] text-sky-200 space-y-1 leading-relaxed">
+                    <p className="font-bold text-sky-300">Schritt-für-Schritt in Cloudflare:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-[9.5px]">
+                      <li>Gehe auf <b>cloudflare.com</b> → Einloggen (kostenlos).</li>
+                      <li>Im Menü links auf <b>Storage & Databases</b> → <b>D1 SQL Database</b>.</li>
+                      <li>Klicke auf <b>Create database</b> → Name z.B. <code>catworld</code> eingeben und erstellen.</li>
+                      <li>Kopiere die angezeigte <b>Database ID</b> (UUID) sowie oben rechts auf der Dashboard-Startseite deine <b>Account ID</b>.</li>
+                      <li>Oben rechts auf dein Profilbild → <b>My Profile</b> → <b>API Tokens</b> → <b>Create Token</b> → Vorlage <i>D1 Edit</i> auswählen (oder Berechtigung D1:Edit) → Token kopieren.</li>
+                      <li>Alle 3 Felder unten ausfüllen und auf <b>Verbinden</b> klicken!</li>
+                    </ol>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[9px] text-slate-400 block mb-0.5">1. Cloudflare Account ID:</label>
                   <input
                     type="text"
-                    placeholder="postgresql://neondb_owner:passwort@ep-xyz.neon.tech/neondb?sslmode=require"
-                    value={dbUrlInput}
-                    onChange={e => setDbUrlInput(e.target.value)}
-                    className={`flex-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
+                    placeholder="z.B. a1b2c3d4e5f6g7h8..."
+                    value={cfAccountIdInput}
+                    onChange={e => setCfAccountIdInput(e.target.value)}
+                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
                       isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
                     }`}
                   />
-                  <button
-                    onClick={handleSaveDatabaseUrl}
-                    disabled={isConnectingDb || !dbUrlInput.trim()}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 shrink-0"
-                  >
-                    {isConnectingDb ? 'Prüfe...' : 'Verbinden'}
-                  </button>
                 </div>
-                {dbUrlInput.includes('***') && (
-                  <div className="text-[10px] text-rose-500 font-bold mb-1.5 bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/20">
-                    ⚠️ Achtung: Im Link stehen noch Sternchen (***)! Klicke in Neon bei „Connection Details“ zuerst auf das Auge „Show password“ oder das Kopieren-Symbol, damit das echte Passwort im Link steht.
-                  </div>
-                )}
+
+                <div>
+                  <label className="text-[9px] text-slate-400 block mb-0.5">2. D1 Database ID (UUID):</label>
+                  <input
+                    type="text"
+                    placeholder="z.B. 12345678-abcd-1234-ef00-..."
+                    value={cfDatabaseIdInput}
+                    onChange={e => setCfDatabaseIdInput(e.target.value)}
+                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
+                      isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] text-slate-400 block mb-0.5">3. Cloudflare API Token (mit D1 Edit):</label>
+                  <input
+                    type="password"
+                    placeholder="Bearer Token..."
+                    value={cfApiTokenInput}
+                    onChange={e => setCfApiTokenInput(e.target.value)}
+                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
+                      isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                    }`}
+                  />
+                </div>
+
+                <button
+                  onClick={handleSaveCloudflareD1}
+                  disabled={isConnectingCf || !cfAccountIdInput.trim() || !cfDatabaseIdInput.trim() || !cfApiTokenInput.trim()}
+                  className="w-full py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-slate-950 hover:brightness-105 active:scale-98 transition-all disabled:opacity-50 shadow-md shadow-amber-500/20"
+                >
+                  {isConnectingCf ? 'Prüfe Verbindung zu Cloudflare...' : '☁️ Mit Cloudflare D1 verbinden'}
+                </button>
+
                 <div className="text-[9px] text-slate-400 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
-                  💡 <b>Tipp:</b> Sobald hier oder in Vercel als <code>DATABASE_URL</code> hinterlegt, sind alle Katzen, Münzen und User permanent synchronisiert!
+                  💡 <b>100% sicher:</b> Cloudflare D1 speichert alle Katzen, Münzen und User permanent in Cloudflares globalem Edge-Netzwerk ohne Serverabstürze!
                 </div>
               </div>
             )}

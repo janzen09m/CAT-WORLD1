@@ -23,14 +23,28 @@ const DATA_DIR = getSafeDataDir();
 const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
 const BUNDLED_DB_FILE = path.resolve(process.cwd(), 'data', 'catworld_store.json');
 
-// PostgreSQL Connection Pool (for Vercel Postgres / Neon / Supabase / Cloud SQL)
+// PostgreSQL Connection Pool (optional fallback)
 let customPostgresUrl: string | null = null;
 const envConnectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 let pgPool: pg.Pool | null = null;
 
+export interface CloudflareD1Config {
+  accountId: string;
+  databaseId: string;
+  apiToken: string;
+}
+
+let cloudflareD1Config: CloudflareD1Config | null = null;
+if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_D1_DATABASE_ID && process.env.CLOUDFLARE_API_TOKEN) {
+  cloudflareD1Config = {
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID.trim(),
+    databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID.trim(),
+    apiToken: process.env.CLOUDFLARE_API_TOKEN.trim(),
+  };
+}
+
 function cleanConnectionString(raw: string): string {
   let clean = raw.trim();
-  // Remove channel_binding parameter as node-postgres driver can fail on SASL channel_binding
   clean = clean.replace(/([?&])channel_binding=[^&]*(&|$)/g, '$1');
   clean = clean.replace(/[?&]$/, '');
   return clean;
@@ -45,9 +59,8 @@ function createPgPool(connStr: string): pg.Pool {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
   });
-  // Critical: Prevent unhandled error events from crashing the serverless runtime when Neon scales to zero or resets
   pool.on('error', (err) => {
-    console.warn('🐘 PostgreSQL pool background warning (auto-handled):', err?.message || err);
+    console.warn('PostgreSQL pool background warning (auto-handled):', err?.message || err);
   });
   return pool;
 }
@@ -55,7 +68,6 @@ function createPgPool(connStr: string): pg.Pool {
 if (envConnectionString) {
   try {
     pgPool = createPgPool(envConnectionString);
-    console.log('🐘 PostgreSQL pool initialized successfully from environment');
   } catch (err) {
     console.warn('PostgreSQL pool creation failed, falling back to local store:', err);
   }
@@ -68,6 +80,7 @@ interface DatabaseStore {
   nextGlobalMintNumber?: number;
   botToken?: string;
   postgresUrl?: string;
+  cloudflareD1?: CloudflareD1Config;
 }
 
 // In-memory cache
@@ -78,6 +91,7 @@ let memoryStore: DatabaseStore = {
   nextGlobalMintNumber: 1,
   botToken: undefined,
   postgresUrl: undefined,
+  cloudflareD1: undefined,
 };
 
 // Initialize PostgreSQL tables if pool is active
@@ -197,6 +211,150 @@ function saveMintNumberToPg(mintNumber: number) {
   ).catch(() => {});
 }
 
+// ==========================================
+// Cloudflare D1 Serverless Database (SQL at Edge)
+// ==========================================
+
+export async function queryCloudflareD1(sql: string, params: any[] = []): Promise<any[]> {
+  const config = cloudflareD1Config || memoryStore.cloudflareD1;
+  if (!config || !config.accountId || !config.databaseId || !config.apiToken) {
+    throw new Error('Cloudflare D1 ist nicht eingerichtet');
+  }
+
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/d1/database/${config.databaseId}/query`;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sql, params }),
+  });
+
+  const data: any = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    const errorMsg = data?.errors?.[0]?.message || `Cloudflare API Fehler (HTTP ${res.status})`;
+    throw new Error(errorMsg);
+  }
+
+  const queryResult = data.result?.[0];
+  if (!queryResult || queryResult.success === false) {
+    throw new Error(queryResult?.error || 'D1 SQL Query Fehler');
+  }
+
+  return queryResult.results || [];
+}
+
+export async function initCloudflareD1Tables(): Promise<void> {
+  const config = cloudflareD1Config || memoryStore.cloudflareD1;
+  if (!config || !config.accountId || !config.databaseId || !config.apiToken) return;
+
+  try {
+    await queryCloudflareD1(`
+      CREATE TABLE IF NOT EXISTS players (
+        id TEXT PRIMARY KEY,
+        telegram_user_id INTEGER,
+        telegram_username TEXT,
+        player_name TEXT NOT NULL,
+        coins INTEGER NOT NULL DEFAULT 500,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await queryCloudflareD1(`
+      CREATE TABLE IF NOT EXISTS global_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await queryCloudflareD1(`
+      CREATE TABLE IF NOT EXISTS market_listings (
+        id TEXT PRIMARY KEY,
+        seller_id TEXT,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Load global mint counter from D1
+    try {
+      const metaRes = await queryCloudflareD1(`SELECT value FROM global_meta WHERE key = 'nextGlobalMintNumber'`);
+      if (metaRes.length > 0 && metaRes[0].value) {
+        const val = typeof metaRes[0].value === 'string' ? JSON.parse(metaRes[0].value) : metaRes[0].value;
+        if (typeof val === 'number') {
+          memoryStore.nextGlobalMintNumber = Math.max(memoryStore.nextGlobalMintNumber || 1, val);
+        }
+      }
+    } catch {}
+
+    // Load existing players from D1 into memory cache
+    try {
+      const playersRes = await queryCloudflareD1(`SELECT id, data FROM players`);
+      let loaded = 0;
+      for (const row of playersRes) {
+        if (row.data) {
+          try {
+            const p = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+            if (p && p.id) {
+              memoryStore.players[p.id] = p;
+              loaded++;
+            }
+          } catch {}
+        }
+      }
+      console.log(`☁️ Loaded ${loaded} players from Cloudflare D1 database`);
+    } catch (err) {
+      console.warn('Could not load players from Cloudflare D1:', err);
+    }
+  } catch (err) {
+    console.error('Error initializing Cloudflare D1 tables:', err);
+    throw err;
+  }
+}
+
+function savePlayerToCloudflareD1(player: PlayerData): void {
+  const config = cloudflareD1Config || memoryStore.cloudflareD1;
+  if (!config || !config.accountId || !config.databaseId || !config.apiToken) return;
+
+  const sql = `
+    INSERT INTO players (id, telegram_user_id, telegram_username, player_name, coins, data, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT (id) DO UPDATE SET
+      telegram_user_id = excluded.telegram_user_id,
+      telegram_username = excluded.telegram_username,
+      player_name = excluded.player_name,
+      coins = excluded.coins,
+      data = excluded.data,
+      updated_at = datetime('now');
+  `;
+
+  queryCloudflareD1(sql, [
+    player.id,
+    player.telegramUserId || null,
+    player.telegramUsername || null,
+    player.playerName,
+    player.coins,
+    JSON.stringify(player),
+  ]).catch(err => {
+    console.warn(`Cloudflare D1 background save for player ${player.id}:`, err?.message || err);
+  });
+}
+
+function saveMintNumberToCloudflareD1(mintNumber: number): void {
+  const config = cloudflareD1Config || memoryStore.cloudflareD1;
+  if (!config || !config.accountId || !config.databaseId || !config.apiToken) return;
+
+  const sql = `
+    INSERT INTO global_meta (key, value, updated_at)
+    VALUES ('nextGlobalMintNumber', ?, datetime('now'))
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = datetime('now');
+  `;
+  queryCloudflareD1(sql, [JSON.stringify(mintNumber)]).catch(() => {});
+}
+
 // Initialize file storage safely across both local Node and Vercel Serverless
 function ensureDataDir() {
   try {
@@ -245,6 +403,11 @@ function ensureDataDir() {
   // Try PostgreSQL connection in background
   if (pgPool) {
     initPgTables().catch(() => {});
+  }
+
+  // Try Cloudflare D1 connection in background
+  if (cloudflareD1Config || memoryStore.cloudflareD1) {
+    initCloudflareD1Tables().catch(() => {});
   }
 }
 
@@ -354,6 +517,7 @@ export function getNextGlobalMintNumber(): number {
   memoryStore.nextGlobalMintNumber += 1;
   saveToDisk();
   saveMintNumberToPg(memoryStore.nextGlobalMintNumber);
+  saveMintNumberToCloudflareD1(memoryStore.nextGlobalMintNumber);
   return next;
 }
 
@@ -435,6 +599,7 @@ export function createNewPlayer(id: string, tgUser?: { id?: number; name?: strin
   memoryStore.players[id] = newPlayer;
   saveToDisk();
   savePlayerToPg(newPlayer);
+  savePlayerToCloudflareD1(newPlayer);
   return newPlayer;
 }
 
@@ -558,6 +723,7 @@ export function getPlayer(id: string): PlayerData | null {
   if (needsSave) {
     saveToDisk();
     savePlayerToPg(player);
+    savePlayerToCloudflareD1(player);
   }
 
   // Check daily reset
@@ -573,6 +739,7 @@ export function getOrCreatePlayer(id: string, tgUser?: { id?: number; name?: str
       existing.telegramUsername = tgUser.username;
       saveToDisk();
       savePlayerToPg(existing);
+      savePlayerToCloudflareD1(existing);
     }
     return existing;
   }
@@ -583,6 +750,7 @@ export function savePlayer(player: PlayerData): void {
   memoryStore.players[player.id] = player;
   saveToDisk();
   savePlayerToPg(player);
+  savePlayerToCloudflareD1(player);
 }
 
 export function reloadStoreFromDiskIfNeeded(): void {
@@ -602,12 +770,18 @@ export function reloadStoreFromDiskIfNeeded(): void {
       if (parsed && parsed.postgresUrl) {
         memoryStore.postgresUrl = parsed.postgresUrl;
         customPostgresUrl = parsed.postgresUrl;
-        // If not connected yet, auto-connect using stored url
         if (!pgPool) {
           try {
             pgPool = createPgPool(parsed.postgresUrl);
             initPgTables().catch(() => {});
           } catch {}
+        }
+      }
+      if (parsed && parsed.cloudflareD1) {
+        memoryStore.cloudflareD1 = parsed.cloudflareD1;
+        if (!cloudflareD1Config) {
+          cloudflareD1Config = parsed.cloudflareD1;
+          initCloudflareD1Tables().catch(() => {});
         }
       }
       if (parsed && parsed.nextGlobalMintNumber) {
@@ -669,6 +843,105 @@ export function setStoredBotToken(token: string): void {
       [JSON.stringify(memoryStore.botToken)]
     ).catch(() => {});
   }
+}
+
+export function getCloudflareD1Status(): {
+  isConnected: boolean;
+  accountId?: string;
+  databaseId?: string;
+  maskedToken?: string;
+} {
+  const config = cloudflareD1Config || memoryStore.cloudflareD1;
+  if (!config || !config.accountId || !config.databaseId || !config.apiToken) {
+    return { isConnected: false };
+  }
+  const token = config.apiToken;
+  const maskedToken = token.length > 8 ? `${token.slice(0, 4)}...${token.slice(-4)}` : '****';
+  return {
+    isConnected: true,
+    accountId: config.accountId,
+    databaseId: config.databaseId,
+    maskedToken,
+  };
+}
+
+export async function setCloudflareD1Config(config: CloudflareD1Config): Promise<{ success: boolean; message: string; userCount: number }> {
+  const accountId = config.accountId.trim();
+  const databaseId = config.databaseId.trim();
+  const apiToken = config.apiToken.trim();
+
+  if (!accountId || !databaseId || !apiToken) {
+    throw new Error('Account ID, Database ID und API Token müssen angegeben werden.');
+  }
+
+  // Test Cloudflare D1 query
+  const testEndpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
+  const res = await fetch(testEndpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sql: 'SELECT 1 as test', params: [] }),
+  });
+
+  const data: any = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    const errorMsg = data?.errors?.[0]?.message || `Cloudflare API Fehler (${res.status}). Prüfe Account ID, Database ID und Token.`;
+    throw new Error(errorMsg);
+  }
+
+  // Active configuration
+  cloudflareD1Config = { accountId, databaseId, apiToken };
+  memoryStore.cloudflareD1 = { accountId, databaseId, apiToken };
+  saveToDisk();
+
+  // Initialize tables
+  await initCloudflareD1Tables();
+
+  // Push existing memory players to Cloudflare D1
+  for (const player of Object.values(memoryStore.players)) {
+    savePlayerToCloudflareD1(player);
+  }
+
+  return {
+    success: true,
+    message: 'Erfolgreich mit Cloudflare D1 verbunden! Tabellen angelegt und alle Daten synchronisiert.',
+    userCount: Object.keys(memoryStore.players).length,
+  };
+}
+
+export function getDatabaseStatus(): {
+  provider: 'cloudflare_d1' | 'postgres' | 'local';
+  isConnected: boolean;
+  cloudflare: {
+    isConnected: boolean;
+    accountId?: string;
+    databaseId?: string;
+    maskedToken?: string;
+  };
+  postgres: {
+    isConnected: boolean;
+    connectionStringPresent: boolean;
+    maskedUrl?: string;
+    source?: 'env' | 'custom' | 'none';
+  };
+} {
+  const cf = getCloudflareD1Status();
+  const pg = getPostgresStatus();
+  let provider: 'cloudflare_d1' | 'postgres' | 'local' = 'local';
+  if (cf.isConnected) {
+    provider = 'cloudflare_d1';
+  } else if (pg.isConnected) {
+    provider = 'postgres';
+  }
+
+  return {
+    provider,
+    isConnected: cf.isConnected || pg.isConnected,
+    cloudflare: cf,
+    postgres: pg,
+  };
 }
 
 export function getPostgresStatus(): {

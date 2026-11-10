@@ -15,6 +15,9 @@ import {
   setStoredBotToken,
   getPostgresStatus,
   setPostgresConnectionString,
+  getCloudflareD1Status,
+  setCloudflareD1Config,
+  getDatabaseStatus,
   syncPlayerProfile,
 } from './db';
 import { CAT_SKINS, GET_CAT_BY_ID, getDuplicateCoinBonus } from '../data/catsData';
@@ -1291,6 +1294,8 @@ const handleAdminOverview = (req: Request, res: Response) => {
       players: sanitizedPlayers,
       botTokenConfigured: Boolean(currentBotToken),
       maskedBotToken,
+      cloudflareStatus: getCloudflareD1Status(),
+      databaseStatus: getDatabaseStatus(),
       postgresStatus: getPostgresStatus(),
       serverTime: new Date().toISOString(),
     });
@@ -1303,6 +1308,42 @@ const handleAdminOverview = (req: Request, res: Response) => {
 // Mount both GET and POST for maximum compatibility across environments & proxies
 apiRouter.get('/admin/overview', handleAdminOverview);
 apiRouter.post('/admin/overview', handleAdminOverview);
+
+// POST /api/admin/set-cloudflare-d1 (Configure Cloudflare D1 SQL database directly from Admin Panel)
+apiRouter.post('/admin/set-cloudflare-d1', async (req: Request, res: Response) => {
+  try {
+    const player = getAuthenticatedPlayer(req);
+    if (!isUserAdmin(player, req)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Zugriff verweigert. Diese Funktion ist exklusiv für Admin 8979248747.',
+      });
+    }
+
+    const { accountId, databaseId, apiToken } = req.body;
+    if (!accountId || !databaseId || !apiToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Bitte Account ID, Database ID und API Token angeben.',
+      });
+    }
+
+    const result = await setCloudflareD1Config({ accountId, databaseId, apiToken });
+    return res.json({
+      success: true,
+      message: result.message,
+      userCount: result.userCount,
+      cloudflareStatus: getCloudflareD1Status(),
+      databaseStatus: getDatabaseStatus(),
+    });
+  } catch (err: any) {
+    console.error('Error connecting Cloudflare D1:', err);
+    return res.status(500).json({
+      success: false,
+      error: `Cloudflare D1 Verbindung fehlgeschlagen: ${err?.message || 'Prüfe Account ID, Database ID und Token'}`,
+    });
+  }
+});
 
 // POST /api/admin/set-bot-token (Set bot token directly from Admin Panel for Stars & Notifications)
 apiRouter.post('/admin/set-bot-token', (req: Request, res: Response) => {
@@ -1334,7 +1375,7 @@ apiRouter.post('/admin/set-bot-token', (req: Request, res: Response) => {
   }
 });
 
-// POST /api/admin/set-database-url (Connect Neon.tech PostgreSQL directly from Admin Panel)
+// POST /api/admin/set-database-url (Optional PostgreSQL fallback)
 apiRouter.post('/admin/set-database-url', async (req: Request, res: Response) => {
   try {
     const player = getAuthenticatedPlayer(req);
@@ -1349,7 +1390,7 @@ apiRouter.post('/admin/set-database-url', async (req: Request, res: Response) =>
     if (!url || typeof url !== 'string' || url.trim().length < 15) {
       return res.status(400).json({
         success: false,
-        error: 'Ungültige PostgreSQL-Verbindungs-URL. Format: postgresql://username:password@ep-xyz.neon.tech/neondb?sslmode=require',
+        error: 'Ungültige PostgreSQL-Verbindungs-URL. Format: postgresql://username:password@hostname/dbname?sslmode=require',
       });
     }
 
@@ -1359,12 +1400,13 @@ apiRouter.post('/admin/set-database-url', async (req: Request, res: Response) =>
       message: result.message,
       userCount: result.userCount,
       postgresStatus: getPostgresStatus(),
+      databaseStatus: getDatabaseStatus(),
     });
   } catch (err: any) {
-    console.error('Error connecting to Neon.tech PostgreSQL:', err);
+    console.error('Error connecting to PostgreSQL:', err);
     return res.status(500).json({
       success: false,
-      error: `Verbindung zu Neon.tech fehlgeschlagen: ${err?.message || 'Prüfe Hostname, Benutzer und Passwort'}`,
+      error: `Verbindung fehlgeschlagen: ${err?.message || 'Prüfe Hostname, Benutzer und Passwort'}`,
     });
   }
 });
