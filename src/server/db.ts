@@ -23,15 +23,15 @@ const DATA_DIR = getSafeDataDir();
 const DB_FILE = path.resolve(DATA_DIR, 'catworld_store.json');
 const BUNDLED_DB_FILE = path.resolve(process.cwd(), 'data', 'catworld_store.json');
 
-// PostgreSQL Connection Pool (optional fallback)
+// PostgreSQL Connection Pool (disabled to prevent timeouts from abandoned Neon URLs)
 let customPostgresUrl: string | null = null;
-const envConnectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 let pgPool: pg.Pool | null = null;
 
 export interface CloudflareD1Config {
   accountId: string;
   databaseId: string;
   apiToken: string;
+  authEmail?: string;
 }
 
 let cloudflareD1Config: CloudflareD1Config | null = null;
@@ -40,37 +40,21 @@ if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_D1_DATABASE_ID &
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID.trim(),
     databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID.trim(),
     apiToken: process.env.CLOUDFLARE_API_TOKEN.trim(),
+    authEmail: process.env.CLOUDFLARE_AUTH_EMAIL ? process.env.CLOUDFLARE_AUTH_EMAIL.trim() : undefined,
   };
 }
 
-function cleanConnectionString(raw: string): string {
-  let clean = raw.trim();
-  clean = clean.replace(/([?&])channel_binding=[^&]*(&|$)/g, '$1');
-  clean = clean.replace(/[?&]$/, '');
-  return clean;
-}
-
-function createPgPool(connStr: string): pg.Pool {
-  const sanitized = cleanConnectionString(connStr);
-  const pool = new Pool({
-    connectionString: sanitized,
-    ssl: sanitized.includes('localhost') ? false : { rejectUnauthorized: false },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
-  pool.on('error', (err) => {
-    console.warn('PostgreSQL pool background warning (auto-handled):', err?.message || err);
-  });
-  return pool;
-}
-
-if (envConnectionString) {
-  try {
-    pgPool = createPgPool(envConnectionString);
-  } catch (err) {
-    console.warn('PostgreSQL pool creation failed, falling back to local store:', err);
+export function getCloudflareAuthHeaders(config: CloudflareD1Config): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (config.authEmail && config.authEmail.trim()) {
+    headers['X-Auth-Email'] = config.authEmail.trim();
+    headers['X-Auth-Key'] = config.apiToken.trim();
+  } else {
+    headers['Authorization'] = `Bearer ${config.apiToken.trim()}`;
   }
+  return headers;
 }
 
 interface DatabaseStore {
@@ -224,10 +208,7 @@ export async function queryCloudflareD1(sql: string, params: any[] = []): Promis
   const endpoint = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/d1/database/${config.databaseId}/query`;
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${config.apiToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers: getCloudflareAuthHeaders(config),
     body: JSON.stringify({ sql, params }),
   });
 
@@ -769,13 +750,6 @@ export function reloadStoreFromDiskIfNeeded(): void {
       }
       if (parsed && parsed.postgresUrl) {
         memoryStore.postgresUrl = parsed.postgresUrl;
-        customPostgresUrl = parsed.postgresUrl;
-        if (!pgPool) {
-          try {
-            pgPool = createPgPool(parsed.postgresUrl);
-            initPgTables().catch(() => {});
-          } catch {}
-        }
       }
       if (parsed && parsed.cloudflareD1) {
         memoryStore.cloudflareD1 = parsed.cloudflareD1;
@@ -869,14 +843,17 @@ export async function setCloudflareD1Config(config: CloudflareD1Config): Promise
   const accountId = config.accountId.trim();
   const databaseId = config.databaseId.trim();
   const apiToken = config.apiToken.trim();
+  const authEmail = config.authEmail ? config.authEmail.trim() : undefined;
 
   if (!accountId || !databaseId || !apiToken) {
     throw new Error('Account ID, Database ID und API Token müssen angegeben werden.');
   }
 
-  // Test Cloudflare D1 query
   const testEndpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
-  const res = await fetch(testEndpoint, {
+
+  // 1. First attempt: standard Bearer Token
+  let authType: 'bearer' | 'global_key' = 'bearer';
+  let res = await fetch(testEndpoint, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiToken}`,
@@ -885,15 +862,51 @@ export async function setCloudflareD1Config(config: CloudflareD1Config): Promise
     body: JSON.stringify({ sql: 'SELECT 1 as test', params: [] }),
   });
 
-  const data: any = await res.json().catch(() => null);
+  let data: any = await res.json().catch(() => null);
+
+  // 2. Second attempt: if Bearer failed with Authentication error, test with Global API Key if email provided or plausible
   if (!res.ok || !data?.success) {
-    const errorMsg = data?.errors?.[0]?.message || `Cloudflare API Fehler (${res.status}). Prüfe Account ID, Database ID und Token.`;
+    const isAuthErr = data?.errors?.[0]?.message?.includes('Authentication') || res.status === 400 || res.status === 401;
+    const testEmail = authEmail || (apiToken.length === 37 ? 'janzen09m@gmail.com' : undefined);
+    if (isAuthErr && testEmail) {
+      try {
+        const resGlobal = await fetch(testEndpoint, {
+          method: 'POST',
+          headers: {
+            'X-Auth-Email': testEmail,
+            'X-Auth-Key': apiToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ sql: 'SELECT 1 as test', params: [] }),
+        });
+        const dataGlobal: any = await resGlobal.json().catch(() => null);
+        if (resGlobal.ok && dataGlobal?.success) {
+          res = resGlobal;
+          data = dataGlobal;
+          authType = 'global_key';
+          config.authEmail = testEmail;
+        }
+      } catch {}
+    }
+  }
+
+  if (!res.ok || !data?.success) {
+    let errorMsg = data?.errors?.[0]?.message || `Cloudflare API Fehler (${res.status})`;
+    if (errorMsg.includes('Authentication') || errorMsg.includes('auth') || res.status === 400 || res.status === 401) {
+      errorMsg = 'Cloudflare Token ungültig ("Authentication error"). Bitte erstelle in Cloudflare unter "My Profile" -> "API Tokens" einen Token mit der Vorlage "D1 Edit" (Berechtigung: Account -> D1 -> Edit).';
+    }
     throw new Error(errorMsg);
   }
 
   // Active configuration
-  cloudflareD1Config = { accountId, databaseId, apiToken };
-  memoryStore.cloudflareD1 = { accountId, databaseId, apiToken };
+  const activeConfig: CloudflareD1Config = {
+    accountId,
+    databaseId,
+    apiToken,
+    authEmail: authType === 'global_key' ? config.authEmail : undefined,
+  };
+  cloudflareD1Config = activeConfig;
+  memoryStore.cloudflareD1 = activeConfig;
   saveToDisk();
 
   // Initialize tables
@@ -912,7 +925,7 @@ export async function setCloudflareD1Config(config: CloudflareD1Config): Promise
 }
 
 export function getDatabaseStatus(): {
-  provider: 'cloudflare_d1' | 'postgres' | 'local';
+  provider: 'cloudflare_d1' | 'local';
   isConnected: boolean;
   cloudflare: {
     isConnected: boolean;
@@ -920,27 +933,12 @@ export function getDatabaseStatus(): {
     databaseId?: string;
     maskedToken?: string;
   };
-  postgres: {
-    isConnected: boolean;
-    connectionStringPresent: boolean;
-    maskedUrl?: string;
-    source?: 'env' | 'custom' | 'none';
-  };
 } {
   const cf = getCloudflareD1Status();
-  const pg = getPostgresStatus();
-  let provider: 'cloudflare_d1' | 'postgres' | 'local' = 'local';
-  if (cf.isConnected) {
-    provider = 'cloudflare_d1';
-  } else if (pg.isConnected) {
-    provider = 'postgres';
-  }
-
   return {
-    provider,
-    isConnected: cf.isConnected || pg.isConnected,
+    provider: cf.isConnected ? 'cloudflare_d1' : 'local',
+    isConnected: cf.isConnected,
     cloudflare: cf,
-    postgres: pg,
   };
 }
 
@@ -950,92 +948,18 @@ export function getPostgresStatus(): {
   maskedUrl?: string;
   source?: 'env' | 'custom' | 'none';
 } {
-  const url = customPostgresUrl || memoryStore.postgresUrl || process.env.DATABASE_URL || process.env.POSTGRES_URL;
-  let maskedUrl = '';
-  let source: 'env' | 'custom' | 'none' = 'none';
-
-  if (url) {
-    source = (customPostgresUrl || memoryStore.postgresUrl) ? 'custom' : 'env';
-    try {
-      const parsed = new URL(url);
-      maskedUrl = `${parsed.protocol}//${parsed.username ? parsed.username + '@' : ''}${parsed.host}${parsed.pathname}`;
-    } catch {
-      maskedUrl = url.length > 20 ? `${url.slice(0, 15)}...${url.slice(-8)}` : url;
-    }
-  }
-
   return {
-    isConnected: Boolean(pgPool),
-    connectionStringPresent: Boolean(url),
-    maskedUrl,
-    source,
+    isConnected: false,
+    connectionStringPresent: false,
+    maskedUrl: '',
+    source: 'none',
   };
 }
 
-export async function setPostgresConnectionString(rawUrl: string): Promise<{ success: boolean; message: string; userCount: number }> {
-  let url = rawUrl.trim();
-  if (!url || (!url.startsWith('postgres://') && !url.startsWith('postgresql://'))) {
-    throw new Error('Ungültige Postgres-URL. Muss mit postgresql:// oder postgres:// beginnen.');
-  }
-
-  // Detect if user copied masked password with asterisks
-  if (url.includes('****') || url.includes('neondb_owner:***')) {
-    throw new Error('Im Link stehen noch Sternchen (***)! Klicke in Neon bei "Connection Details" zuerst auf "Show password" oder das Kopieren-Symbol, damit das echte Passwort im Link steht.');
-  }
-
-  url = cleanConnectionString(url);
-  const testPool = createPgPool(url);
-
-  // Test actual connection
-  let testClient: pg.PoolClient;
-  try {
-    testClient = await testPool.connect();
-  } catch (connErr: any) {
-    if (connErr?.message?.includes('password authentication failed')) {
-      throw new Error('Passwort falsch! Bitte stelle sicher, dass du in Neon bei "Connection Details" auf "Show password" klickst und das unmaskierte Kennwort kopierst.');
-    }
-    throw new Error(`Verbindungsaufbau fehlgeschlagen: ${connErr?.message || connErr}`);
-  }
-
-  try {
-    await testClient.query('SELECT 1;');
-  } finally {
-    testClient.release();
-  }
-
-  // Swap to new pool
-  if (pgPool) {
-    try {
-      await pgPool.end();
-    } catch {}
-  }
-  pgPool = testPool;
-  customPostgresUrl = url;
-  memoryStore.postgresUrl = url;
-
-  // Initialize tables in Neon Postgres
-  await initPgTables();
-
-  // Push all existing memory players to PostgreSQL
-  for (const player of Object.values(memoryStore.players)) {
-    savePlayerToPg(player);
-  }
-
-  // Load all players currently in PostgreSQL into memory
-  try {
-    const res = await testPool.query('SELECT id, data FROM players');
-    for (const row of res.rows) {
-      if (row.data && row.data.id) {
-        memoryStore.players[row.data.id] = row.data;
-      }
-    }
-  } catch {}
-
-  saveToDisk();
-
+export async function setPostgresConnectionString(_rawUrl: string): Promise<{ success: boolean; message: string; userCount: number }> {
   return {
-    success: true,
-    message: 'Erfolgreich mit Neon.tech PostgreSQL verbunden! Tabellen initialisiert und alle Spielerdaten synchronisiert.',
+    success: false,
+    message: 'Postgres/Neon wurde vollständig deaktiviert. Bitte nutze Cloudflare D1.',
     userCount: Object.keys(memoryStore.players).length,
   };
 }

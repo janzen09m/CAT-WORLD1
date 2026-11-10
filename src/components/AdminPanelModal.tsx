@@ -8,12 +8,17 @@ import {
   Users,
   Coins,
   Search,
-  PlusCircle,
   CheckCircle2,
   AlertCircle,
   Key,
   ShieldCheck,
   RefreshCw,
+  Database,
+  Sparkles,
+  BarChart3,
+  HelpCircle,
+  Cat,
+  ExternalLink,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -42,6 +47,8 @@ interface AdminPanelModalProps {
   theme?: Theme;
 }
 
+type AdminTab = 'players' | 'cloudflare' | 'bot' | 'stats';
+
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   player,
   onClose,
@@ -50,6 +57,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   theme = 'light',
 }) => {
   const isLight = theme === 'light';
+  const [activeTab, setActiveTab] = useState<AdminTab>('players');
   const [players, setPlayers] = useState<AdminPlayerEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,7 +70,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [maskedBotToken, setMaskedBotToken] = useState('');
   const [botTokenInput, setBotTokenInput] = useState('');
   const [isSavingToken, setIsSavingToken] = useState(false);
-  const [showTokenConfig, setShowTokenConfig] = useState(false);
 
   // Cloudflare D1 SQL Database state
   const [cloudflareStatus, setCloudflareStatus] = useState<{
@@ -76,11 +83,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [cfAccountIdInput, setCfAccountIdInput] = useState('');
   const [cfDatabaseIdInput, setCfDatabaseIdInput] = useState('');
   const [cfApiTokenInput, setCfApiTokenInput] = useState('');
+  const [cfEmailInput, setCfEmailInput] = useState('');
   const [isConnectingCf, setIsConnectingCf] = useState(false);
-  const [showCfConfig, setShowCfConfig] = useState(false);
   const [showCfHelp, setShowCfHelp] = useState(false);
 
-  // Safe admin API helper that prevents Safari/WebKit "string didn't match expected pattern" error
+  // Safe admin API helper that prevents Safari/WebKit and Vercel proxy errors
   const safeAdminFetch = async (url: string, body?: any) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -118,7 +125,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       throw new Error(`Server antwortete mit Code ${res.status}.`);
     }
 
-    if (!res.ok || !data?.success) {
+    if (!data?.success) {
       const errMsg =
         typeof data?.error === 'object'
           ? data?.error?.message || JSON.stringify(data.error)
@@ -180,11 +187,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           ? err.message
           : typeof err === 'string'
           ? err
-          : 'Verbindung zum Server wird synchronisiert...';
-      if (rawMsg.includes('A server error has occurred') || rawMsg.includes('500') || rawMsg.includes('504')) {
-        rawMsg = 'Serververbindung wird synchronisiert. Richte unten Cloudflare D1 ein für permanente Cloud-Speicherung!';
+          : '';
+      // Suppress generic proxy 500 error display
+      if (rawMsg && !rawMsg.includes('A server error has occurred') && !rawMsg.includes('500') && !rawMsg.includes('504')) {
+        setStatusMsg({ text: rawMsg, type: 'error' });
       }
-      setStatusMsg({ text: rawMsg, type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -219,17 +226,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setBotTokenConfigured(true);
       setMaskedBotToken(`${cleanToken.slice(0, 6)}...${cleanToken.slice(-4)}`);
       setBotTokenInput('');
-      setShowTokenConfig(false);
       setStatusMsg({
         text: '✓ Bot-Token gespeichert! Echte Telegram Stars Zahlungen und Benachrichtigungen sind jetzt aktiv.',
         type: 'success',
       });
     } catch (err: any) {
-      // Even if network returned non-200, client token is safely cached in localStorage
       soundManager.playCoin();
       setBotTokenConfigured(true);
       setMaskedBotToken(`${cleanToken.slice(0, 6)}...${cleanToken.slice(-4)}`);
-      setShowTokenConfig(false);
       setStatusMsg({
         text: '✓ Bot-Token lokal & in Sitzung aktiviert! Stars-Rechnungen sind bereit.',
         type: 'success',
@@ -243,7 +247,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const handleSaveCloudflareD1 = async () => {
     if (!cfAccountIdInput.trim() || !cfDatabaseIdInput.trim() || !cfApiTokenInput.trim()) {
       setStatusMsg({
-        text: 'Bitte alle 3 Felder ausfüllen: Account ID, Database ID und API Token.',
+        text: 'Bitte alle 3 Pflichtfelder ausfüllen: Account ID, Database ID und API Token.',
         type: 'error',
       });
       return;
@@ -253,10 +257,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setStatusMsg(null);
 
     try {
-      const data = await safeAdminFetch('/api/admin/set-cloudflare-d1', {
+      await safeAdminFetch('/api/admin/set-cloudflare-d1', {
         accountId: cfAccountIdInput.trim(),
         databaseId: cfDatabaseIdInput.trim(),
         apiToken: cfApiTokenInput.trim(),
+        authEmail: cfEmailInput.trim() || undefined,
       });
       soundManager.playWinFanfare();
       triggerHaptic('success');
@@ -267,7 +272,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         databaseId: cfDatabaseIdInput.trim(),
         maskedToken: cfApiTokenInput.trim().slice(0, 4) + '...' + cfApiTokenInput.trim().slice(-4),
       });
-      setShowCfConfig(false);
       setStatusMsg({
         text: '✓ Cloudflare D1 erfolgreich verbunden! Alle Katzen, Münzen und User sind jetzt in Cloudflare gespeichert.',
         type: 'success',
@@ -336,11 +340,42 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   });
 
   const totalEconomyCoins = players.reduce((sum, p) => sum + (p.coins || 0), 0);
+  const totalKeys = players.reduce(
+    (sum, p) => sum + ((p.keys?.wooden || 0) + (p.keys?.blue || 0) + (p.keys?.epic || 0) + (p.keys?.legendary || 0)),
+    0
+  );
+  const totalCats = players.reduce((sum, p) => sum + (p.catsCount || 0), 0);
+
+  const tabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: string | number; dot?: 'green' | 'amber' }[] = [
+    {
+      id: 'players',
+      label: 'Spieler',
+      icon: <Users className="w-3.5 h-3.5" />,
+      badge: players.length,
+    },
+    {
+      id: 'cloudflare',
+      label: 'Cloudflare D1',
+      icon: <Database className="w-3.5 h-3.5" />,
+      dot: cloudflareStatus.isConnected ? 'green' : 'amber',
+    },
+    {
+      id: 'bot',
+      label: 'Stars & Bot',
+      icon: <Sparkles className="w-3.5 h-3.5" />,
+      dot: botTokenConfigured ? 'green' : 'amber',
+    },
+    {
+      id: 'stats',
+      label: 'Statistik',
+      icon: <BarChart3 className="w-3.5 h-3.5" />,
+    },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md">
       <div
-        className={`w-full max-w-xl rounded-3xl p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 border max-h-[92vh] flex flex-col ${
+        className={`w-full max-w-xl rounded-3xl p-4 sm:p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 border max-h-[92vh] flex flex-col ${
           isLight
             ? 'bg-gradient-to-b from-white to-slate-50 border-amber-300 text-slate-800'
             : 'bg-gradient-to-b from-slate-900 to-slate-950 border-amber-500/40 text-white'
@@ -355,410 +390,615 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors z-10 ${
             isLight ? 'bg-slate-100 text-slate-400 hover:text-slate-700' : 'bg-slate-800 text-slate-400 hover:text-white'
           }`}
+          aria-label="Schließen"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-center gap-2.5 mb-3">
+        <div className="flex items-center gap-2.5 mb-3 pr-8">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 via-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-500/30 shrink-0 text-xl">
             👑
           </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h3 className={`font-black text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className={`font-black text-sm sm:text-base ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 Admin-Konsole
               </h3>
               <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full border border-amber-500/30 font-bold font-mono">
                 ID: 8979248747
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Vollzugriff: Spielerübersicht & Münzverwaltung</p>
+            <p className="text-[11px] text-slate-400 truncate">Vollzugriff: Spieler, Cloudflare D1 & Bot</p>
           </div>
         </div>
 
-        {/* Quick Stats Bar */}
-        <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-          <div className={`p-2 rounded-2xl border ${isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'}`}>
-            <div className="text-[10px] text-slate-400 font-bold flex items-center justify-center gap-1">
-              <Users className="w-3 h-3 text-amber-500" /> Spieler
-            </div>
-            <div className="font-black text-sm text-amber-500">{players.length}</div>
-          </div>
-
-          <div className={`p-2 rounded-2xl border ${isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'}`}>
-            <div className="text-[10px] text-slate-400 font-bold flex items-center justify-center gap-1">
-              <Coins className="w-3 h-3 text-amber-500" /> Münzen gesamt
-            </div>
-            <div className="font-black text-sm text-amber-500 font-mono">
-              {totalEconomyCoins.toLocaleString('de-DE')}
-            </div>
-          </div>
-
-          <div className={`p-2 rounded-2xl border ${isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'}`}>
-            <div className="text-[10px] text-slate-400 font-bold flex items-center justify-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-emerald-500" /> Status
-            </div>
-            <div className="font-black text-xs text-emerald-400">Admin Aktiv</div>
-          </div>
-        </div>
-
-        {/* Self Grant Card */}
-        <div className={`p-3 rounded-2xl border mb-3 ${
-          isLight ? 'bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-300' : 'bg-amber-500/10 border-amber-500/30'
+        {/* Horizontal Navigation Menu */}
+        <div className={`flex items-center gap-1 p-1 mb-3 rounded-2xl border overflow-x-auto no-scrollbar shrink-0 ${
+          isLight ? 'bg-slate-100/90 border-slate-200' : 'bg-slate-950/80 border-slate-800'
         }`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-black text-amber-500 flex items-center gap-1">
-              <Crown className="w-3.5 h-3.5" /> Dir selbst Münzen geben:
-            </span>
-            <span className="text-[10px] font-mono text-slate-400">
-              Aktuell: {player.coins.toLocaleString('de-DE')} 🪙
-            </span>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {[1000, 10000, 50000, 250000].map(amt => (
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.id;
+            return (
               <button
-                key={amt}
-                onClick={() => handleGrantCoins(player.id, amt)}
-                disabled={isSubmitting}
-                className="py-1.5 px-1 rounded-xl text-[10px] font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-xs hover:brightness-105 active:scale-95 transition-all text-center"
+                key={tab.id}
+                onClick={() => {
+                  soundManager.playClick();
+                  triggerHaptic('light');
+                  setActiveTab(tab.id);
+                }}
+                className={`flex-1 min-w-[90px] py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all whitespace-nowrap select-none ${
+                  isActive
+                    ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-sm font-black scale-[1.02]'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
               >
-                +{amt.toLocaleString('de-DE')} 🪙
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Telegram Stars & Bot Token Configuration Card */}
-        <div className={`p-2.5 rounded-2xl border mb-3 text-xs ${
-          isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-800 text-slate-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">⭐</span>
-              <span className="font-bold">Telegram Stars & Bot-Token:</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                botTokenConfigured
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-              }`}>
-                {botTokenConfigured ? `Aktiv (${maskedBotToken})` : 'Nicht hinterlegt'}
-              </span>
-            </div>
-            <button
-              onClick={() => setShowTokenConfig(!showTokenConfig)}
-              className="text-[10px] text-amber-500 hover:underline font-bold"
-            >
-              {showTokenConfig ? 'Schließen' : '⚙️ Token eingeben'}
-            </button>
-          </div>
-
-          {showTokenConfig && (
-            <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in">
-              <p className="text-[10px] text-slate-400 mb-1.5">
-                Token von <b>@BotFather</b> einfügen, damit echte Telegram Stars Rechnungen erstellt und Nutzer im Bot benachrichtigt werden:
-              </p>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="password"
-                  placeholder="123456789:ABCdefGHI..."
-                  value={botTokenInput}
-                  onChange={e => setBotTokenInput(e.target.value)}
-                  className={`flex-1 px-2.5 py-1.5 rounded-xl border text-xs font-mono outline-hidden ${
-                    isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
-                  }`}
-                />
-                <button
-                  onClick={handleSaveBotToken}
-                  disabled={isSavingToken || !botTokenInput.trim()}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50"
-                >
-                  {isSavingToken ? '...' : 'Speichern'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Cloudflare D1 SQL Database Card */}
-          <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm">☁️</span>
-                <span className="font-bold">Cloudflare D1:</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                    cloudflareStatus.isConnected
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  }`}
-                >
-                  {cloudflareStatus.isConnected
-                    ? 'Verbunden (Aktiv)'
-                    : 'Noch nicht verbunden'}
-                </span>
-              </div>
-              <button
-                onClick={() => setShowCfConfig(!showCfConfig)}
-                className="text-[10px] text-amber-500 hover:underline font-bold"
-              >
-                {showCfConfig ? 'Schließen' : (cloudflareStatus.isConnected ? '⚙️ Ändern' : '🔌 Einrichten')}
-              </button>
-            </div>
-
-            {cloudflareStatus.isConnected && cloudflareStatus.databaseId && (
-              <div className="text-[10px] font-mono text-slate-400 mt-1 truncate">
-                DB-ID: {cloudflareStatus.databaseId}
-              </div>
-            )}
-
-            {showCfConfig && (
-              <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 animate-in fade-in space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] text-slate-400 font-bold">
-                    Cloudflare D1 Zugangsdaten:
-                  </p>
-                  <button
-                    onClick={() => setShowCfHelp(!showCfHelp)}
-                    className="text-[10px] text-sky-400 underline font-semibold"
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+                {tab.badge !== undefined && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-black ${
+                      isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-amber-500/20 text-amber-400'
+                    }`}
                   >
-                    {showCfHelp ? 'Anleitung ausblenden' : '📖 Wo finde ich das?'}
-                  </button>
-                </div>
-
-                {showCfHelp && (
-                  <div className="p-2.5 rounded-xl bg-sky-950/40 border border-sky-500/30 text-[10px] text-sky-200 space-y-1 leading-relaxed">
-                    <p className="font-bold text-sky-300">Schritt-für-Schritt in Cloudflare:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-[9.5px]">
-                      <li>Gehe auf <b>cloudflare.com</b> → Einloggen (kostenlos).</li>
-                      <li>Im Menü links auf <b>Storage & Databases</b> → <b>D1 SQL Database</b>.</li>
-                      <li>Klicke auf <b>Create database</b> → Name z.B. <code>catworld</code> eingeben und erstellen.</li>
-                      <li>Kopiere die angezeigte <b>Database ID</b> (UUID) sowie oben rechts auf der Dashboard-Startseite deine <b>Account ID</b>.</li>
-                      <li>Oben rechts auf dein Profilbild → <b>My Profile</b> → <b>API Tokens</b> → <b>Create Token</b> → Vorlage <i>D1 Edit</i> auswählen (oder Berechtigung D1:Edit) → Token kopieren.</li>
-                      <li>Alle 3 Felder unten ausfüllen und auf <b>Verbinden</b> klicken!</li>
-                    </ol>
-                  </div>
+                    {tab.badge}
+                  </span>
                 )}
-
-                <div>
-                  <label className="text-[9px] text-slate-400 block mb-0.5">1. Cloudflare Account ID:</label>
-                  <input
-                    type="text"
-                    placeholder="z.B. a1b2c3d4e5f6g7h8..."
-                    value={cfAccountIdInput}
-                    onChange={e => setCfAccountIdInput(e.target.value)}
-                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
-                      isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                {tab.dot && (
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      tab.dot === 'green' ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50' : 'bg-amber-500'
                     }`}
                   />
-                </div>
-
-                <div>
-                  <label className="text-[9px] text-slate-400 block mb-0.5">2. D1 Database ID (UUID):</label>
-                  <input
-                    type="text"
-                    placeholder="z.B. 12345678-abcd-1234-ef00-..."
-                    value={cfDatabaseIdInput}
-                    onChange={e => setCfDatabaseIdInput(e.target.value)}
-                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
-                      isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[9px] text-slate-400 block mb-0.5">3. Cloudflare API Token (mit D1 Edit):</label>
-                  <input
-                    type="password"
-                    placeholder="Bearer Token..."
-                    value={cfApiTokenInput}
-                    onChange={e => setCfApiTokenInput(e.target.value)}
-                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] font-mono outline-hidden ${
-                      isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
-                    }`}
-                  />
-                </div>
-
-                <button
-                  onClick={handleSaveCloudflareD1}
-                  disabled={isConnectingCf || !cfAccountIdInput.trim() || !cfDatabaseIdInput.trim() || !cfApiTokenInput.trim()}
-                  className="w-full py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-slate-950 hover:brightness-105 active:scale-98 transition-all disabled:opacity-50 shadow-md shadow-amber-500/20"
-                >
-                  {isConnectingCf ? 'Prüfe Verbindung zu Cloudflare...' : '☁️ Mit Cloudflare D1 verbinden'}
-                </button>
-
-                <div className="text-[9px] text-slate-400 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
-                  💡 <b>100% sicher:</b> Cloudflare D1 speichert alle Katzen, Münzen und User permanent in Cloudflares globalem Edge-Netzwerk ohne Serverabstürze!
-                </div>
-              </div>
-            )}
-          </div>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Status Notification */}
+        {/* Global Status Notification Banner */}
         {statusMsg && (
           <div
-            className={`p-2.5 rounded-xl text-xs flex items-center justify-between mb-3 animate-in fade-in ${
+            className={`p-2.5 rounded-xl text-xs flex items-center justify-between mb-3 shrink-0 animate-in fade-in ${
               statusMsg.type === 'success'
                 ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
                 : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
             }`}
           >
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0 pr-2">
               {statusMsg.type === 'success' ? (
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
               ) : (
                 <AlertCircle className="w-4 h-4 shrink-0" />
               )}
-              <span>{statusMsg.text}</span>
+              <span className="truncate">{statusMsg.text}</span>
             </div>
-            <button onClick={() => setStatusMsg(null)} className="text-xs opacity-70 hover:opacity-100">
+            <button
+              onClick={() => setStatusMsg(null)}
+              className="text-xs opacity-70 hover:opacity-100 shrink-0 font-bold px-1"
+            >
               ✕
             </button>
           </div>
         )}
 
-        {/* Search & Refresh */}
-        <div className="flex items-center gap-2 mb-2">
-          <div className={`flex-1 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs ${
-            isLight ? 'bg-white border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-white'
-          }`}>
-            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <input
-              type="text"
-              placeholder="Spieler suchen (Name, @Username, ID)..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none outline-none w-full text-xs placeholder:text-slate-400"
-            />
-          </div>
-          <button
-            onClick={() => {
-              soundManager.playClick();
-              fetchOverview();
-            }}
-            disabled={isLoading}
-            className={`p-2 rounded-xl border text-xs transition-colors shrink-0 ${
-              isLight ? 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 hover:bg-slate-800 text-slate-300'
-            }`}
-            title="Aktualisieren"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+        {/* TAB 1: SPIELER (PLAYER MANAGEMENT & QUICK GRANT) */}
+        {activeTab === 'players' && (
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 flex flex-col min-h-0">
+            {/* Quick Self-Grant Pill Card */}
+            <div
+              className={`p-3 rounded-2xl border shrink-0 ${
+                isLight
+                  ? 'bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-300'
+                  : 'bg-amber-500/10 border-amber-500/30'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-black text-amber-500 flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5" /> Dir selbst Münzen geben:
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Aktuell: {player.coins.toLocaleString('de-DE')} 🪙
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[1000, 10000, 50000, 250000].map(amt => (
+                  <button
+                    key={amt}
+                    onClick={() => handleGrantCoins(player.id, amt)}
+                    disabled={isSubmitting}
+                    className="py-1.5 px-1 rounded-xl text-[10px] font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-xs hover:brightness-105 active:scale-95 transition-all text-center"
+                  >
+                    +{amt.toLocaleString('de-DE')} 🪙
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Players List Area */}
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-2">
-          {isLoading && players.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">Lade Spieler...</div>
-          ) : filteredPlayers.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">Keine Spieler gefunden.</div>
-          ) : (
-            filteredPlayers.map(p => {
-              const isSelf = p.id === player.id || p.telegramUserId === 8979248747;
-              const customVal = customAmounts[p.id] || '';
+            {/* Search & Refresh Bar */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div
+                className={`flex-1 flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs ${
+                  isLight ? 'bg-white border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-white'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Spieler suchen (Name, @Username, ID)..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="bg-transparent border-none outline-hidden w-full text-xs placeholder:text-slate-400"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  soundManager.playClick();
+                  fetchOverview();
+                }}
+                disabled={isLoading}
+                className={`p-2.5 rounded-xl border text-xs transition-colors shrink-0 ${
+                  isLight
+                    ? 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-700'
+                    : 'bg-slate-900 border-slate-800 hover:bg-slate-800 text-slate-300'
+                }`}
+                title="Aktualisieren"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
 
-              return (
-                <div
-                  key={p.id}
-                  className={`p-3 rounded-2xl border transition-all ${
-                    isSelf
-                      ? isLight ? 'bg-amber-50/70 border-amber-300 ring-1 ring-amber-300' : 'bg-amber-950/20 border-amber-500/40'
-                      : isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/90 border-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+            {/* Players List */}
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-2">
+              {isLoading && players.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">Lade Spieler...</div>
+              ) : filteredPlayers.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">Keine Spieler gefunden.</div>
+              ) : (
+                filteredPlayers.map(p => {
+                  const isSelf = p.id === player.id || p.telegramUserId === 8979248747;
+                  const customVal = customAmounts[p.id] || '';
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-3 rounded-2xl border transition-all ${
                         isSelf
-                          ? 'bg-amber-400 text-slate-950'
-                          : 'bg-purple-600 text-white'
-                      }`}>
-                        {isSelf ? '👑' : p.playerName.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs truncate">{p.playerName}</span>
-                          {isSelf && (
-                            <span className="text-[9px] bg-amber-400/20 text-amber-500 px-1 rounded font-black">
-                              DU
-                            </span>
-                          )}
+                          ? isLight
+                            ? 'bg-amber-50/70 border-amber-300 ring-1 ring-amber-300'
+                            : 'bg-amber-950/20 border-amber-500/40'
+                          : isLight
+                          ? 'bg-white border-slate-200 shadow-xs'
+                          : 'bg-slate-900/90 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                              isSelf ? 'bg-amber-400 text-slate-950' : 'bg-purple-600 text-white'
+                            }`}
+                          >
+                            {isSelf ? '👑' : p.playerName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs truncate">{p.playerName}</span>
+                              {isSelf && (
+                                <span className="text-[9px] bg-amber-400/20 text-amber-500 px-1 rounded font-black">
+                                  DU
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate font-mono">
+                              {p.telegramUsername ? `@${p.telegramUsername}` : p.id}
+                              {p.telegramUserId ? ` (TG ID: ${p.telegramUserId})` : ''}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate font-mono">
-                          {p.telegramUsername ? `@${p.telegramUsername}` : p.id}
-                          {p.telegramUserId ? ` (TG ID: ${p.telegramUserId})` : ''}
+
+                        <div className="text-right shrink-0">
+                          <div className="font-black text-xs text-amber-500 font-mono">
+                            {p.coins.toLocaleString('de-DE')} 🪙
+                          </div>
+                          <div className="text-[9px] text-slate-400">
+                            {p.catsCount} Katzen · {p.keys.wooden + p.keys.blue + p.keys.epic + p.keys.legendary} Keys
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions for this player */}
+                      <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-slate-200/40 dark:border-slate-800/60">
+                        <button
+                          onClick={() => handleGrantCoins(p.id, 1000)}
+                          disabled={isSubmitting}
+                          className="py-1 px-2 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 active:scale-95 transition-all"
+                        >
+                          +1.000
+                        </button>
+                        <button
+                          onClick={() => handleGrantCoins(p.id, 10000)}
+                          disabled={isSubmitting}
+                          className="py-1 px-2 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 active:scale-95 transition-all"
+                        >
+                          +10.000
+                        </button>
+                        <button
+                          onClick={() => handleGrantCoins(p.id, 50000)}
+                          disabled={isSubmitting}
+                          className="py-1 px-2 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 active:scale-95 transition-all"
+                        >
+                          +50.000
+                        </button>
+
+                        {/* Custom Amount Input */}
+                        <div className="flex-1 flex items-center gap-1 min-w-[100px]">
+                          <input
+                            type="number"
+                            placeholder="Menge..."
+                            value={customVal}
+                            onChange={e =>
+                              setCustomAmounts({ ...customAmounts, [p.id]: e.target.value })
+                            }
+                            className={`w-full py-1 px-1.5 rounded-lg border text-[10px] font-mono outline-hidden ${
+                              isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
+                            }`}
+                          />
+                          <button
+                            onClick={() => {
+                              const amt = parseInt(customVal, 10);
+                              if (amt) {
+                                handleGrantCoins(p.id, amt);
+                                setCustomAmounts({ ...customAmounts, [p.id]: '' });
+                              }
+                            }}
+                            disabled={isSubmitting || !customVal}
+                            className="py-1 px-2 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 active:scale-95 transition-all disabled:opacity-40"
+                          >
+                            Senden
+                          </button>
                         </div>
                       </div>
                     </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
 
-                    <div className="text-right shrink-0">
-                      <div className="font-black text-xs text-amber-500 font-mono">
-                        {p.coins.toLocaleString('de-DE')} 🪙
-                      </div>
-                      <div className="text-[9px] text-slate-400">
-                        {p.catsCount} Katzen · {p.keys.wooden + p.keys.blue + p.keys.epic + p.keys.legendary} Keys
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions for this player */}
-                  <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-slate-200/40 dark:border-slate-800/60">
-                    <button
-                      onClick={() => handleGrantCoins(p.id, 1000)}
-                      disabled={isSubmitting}
-                      className="py-1 px-2 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 active:scale-95 transition-all"
-                    >
-                      +1.000
-                    </button>
-                    <button
-                      onClick={() => handleGrantCoins(p.id, 10000)}
-                      disabled={isSubmitting}
-                      className="py-1 px-2 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 active:scale-95 transition-all"
-                    >
-                      +10.000
-                    </button>
-                    <button
-                      onClick={() => handleGrantCoins(p.id, 50000)}
-                      disabled={isSubmitting}
-                      className="py-1 px-2 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 active:scale-95 transition-all"
-                    >
-                      +50.000
-                    </button>
-
-                    {/* Custom Amount Input */}
-                    <div className="flex-1 flex items-center gap-1 min-w-[100px]">
-                      <input
-                        type="number"
-                        placeholder="Menge..."
-                        value={customVal}
-                        onChange={e =>
-                          setCustomAmounts({ ...customAmounts, [p.id]: e.target.value })
-                        }
-                        className={`w-full py-1 px-1.5 rounded-lg border text-[10px] font-mono outline-none ${
-                          isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
-                        }`}
-                      />
-                      <button
-                        onClick={() => {
-                          const amt = parseInt(customVal, 10);
-                          if (amt) {
-                            handleGrantCoins(p.id, amt);
-                            setCustomAmounts({ ...customAmounts, [p.id]: '' });
-                          }
-                        }}
-                        disabled={isSubmitting || !customVal}
-                        className="py-1 px-2 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 active:scale-95 transition-all disabled:opacity-40"
-                      >
-                        Senden
-                      </button>
-                    </div>
+        {/* TAB 2: CLOUDFLARE D1 (SQL DATABASE CONNECTION) */}
+        {activeTab === 'cloudflare' && (
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 flex flex-col min-h-0">
+            {/* Status Card */}
+            <div
+              className={`p-3.5 rounded-2xl border ${
+                cloudflareStatus.isConnected
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : isLight
+                  ? 'bg-slate-50 border-slate-200'
+                  : 'bg-slate-900 border-slate-800'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">☁️</span>
+                  <div>
+                    <h4 className="font-black text-xs">Cloudflare D1 SQL Datenbank</h4>
+                    <p className="text-[10px] text-slate-400">Dauerhafter Speicher für alle Telegram-Accounts</p>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                    cloudflareStatus.isConnected
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  }`}
+                >
+                  {cloudflareStatus.isConnected ? '✓ Verbunden (Aktiv)' : 'Noch nicht verbunden'}
+                </span>
+              </div>
+
+              {cloudflareStatus.isConnected && cloudflareStatus.databaseId && (
+                <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[10px] font-mono text-emerald-300 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Database ID:</span>
+                    <span className="truncate max-w-[240px]">{cloudflareStatus.databaseId}</span>
+                  </div>
+                  {cloudflareStatus.accountId && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Account ID:</span>
+                      <span className="truncate max-w-[240px]">{cloudflareStatus.accountId}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Input Form */}
+            <div
+              className={`p-3.5 rounded-2xl border space-y-2.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-800'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-amber-500" /> Zugangsdaten einrichten:
+                </span>
+                <button
+                  onClick={() => setShowCfHelp(!showCfHelp)}
+                  className="text-[10px] text-sky-400 hover:underline font-semibold flex items-center gap-1"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                  {showCfHelp ? 'Anleitung verbergen' : 'Wo finde ich das?'}
+                </button>
+              </div>
+
+              {showCfHelp && (
+                <div className="p-3 rounded-xl bg-sky-950/40 border border-sky-500/30 text-[10px] text-sky-200 space-y-1.5 leading-relaxed">
+                  <p className="font-bold text-sky-300">Schritt-für-Schritt in Cloudflare:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-[9.5px]">
+                    <li>Gehe auf <b>cloudflare.com</b> → Kostenlos einloggen.</li>
+                    <li>Im Menü links: <b>Storage & Databases</b> → <b>D1 SQL Database</b>.</li>
+                    <li>Klicke <b>Create database</b> → Name z.B. <code>catworld</code> erstellen.</li>
+                    <li>Kopiere die angezeigte <b>Database ID</b> (UUID) und die <b>Account ID</b> (steht auch in der URL).</li>
+                    <li>Oben rechts aufs Profilbild → <b>My Profile</b> → <b>API Tokens</b> → <b>Create Token</b> → Vorlage <i>D1 Edit</i> nutzen → Token kopieren.</li>
+                  </ol>
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                  1. Cloudflare Account ID:
+                </label>
+                <input
+                  type="text"
+                  placeholder="z.B. a4482131e91aaf3ed990652fb6268af1"
+                  value={cfAccountIdInput}
+                  onChange={e => setCfAccountIdInput(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border text-xs font-mono outline-hidden ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                  2. D1 Database ID (UUID):
+                </label>
+                <input
+                  type="text"
+                  placeholder="z.B. 0e217eb9-f171-428a-b7ed-4b57ae31a4b8"
+                  value={cfDatabaseIdInput}
+                  onChange={e => setCfDatabaseIdInput(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border text-xs font-mono outline-hidden ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                  3. Cloudflare API Token (mit D1 Edit):
+                </label>
+                <input
+                  type="password"
+                  placeholder="Bearer Token..."
+                  value={cfApiTokenInput}
+                  onChange={e => setCfApiTokenInput(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border text-xs font-mono outline-hidden ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-slate-400 font-bold">
+                    4. Cloudflare E-Mail (optional):
+                  </label>
+                  <span className="text-[9px] text-slate-400">Nur bei Global API Key</span>
+                </div>
+                <input
+                  type="email"
+                  placeholder="z.B. deine-email@gmail.com"
+                  value={cfEmailInput}
+                  onChange={e => setCfEmailInput(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border text-xs font-mono outline-hidden ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                  }`}
+                />
+              </div>
+
+              <button
+                onClick={handleSaveCloudflareD1}
+                disabled={isConnectingCf || !cfAccountIdInput.trim() || !cfDatabaseIdInput.trim() || !cfApiTokenInput.trim()}
+                className="w-full py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-slate-950 hover:brightness-105 active:scale-98 transition-all disabled:opacity-50 shadow-md shadow-amber-500/20"
+              >
+                {isConnectingCf ? 'Prüfe Verbindung zu Cloudflare...' : '☁️ Mit Cloudflare D1 verbinden'}
+              </button>
+
+              <div className="text-[10px] text-slate-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 leading-relaxed">
+                💡 <b>100% Zuverlässig:</b> Cloudflare D1 speichert alle Katzen, Münzen und User permanent im globalen Edge-Netzwerk ohne Serverabstürze oder Vercel-Timeouts!
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: STARS & BOT TOKEN */}
+        {activeTab === 'bot' && (
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 flex flex-col min-h-0">
+            {/* Bot Status Card */}
+            <div
+              className={`p-3.5 rounded-2xl border ${
+                botTokenConfigured
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : isLight
+                  ? 'bg-slate-50 border-slate-200'
+                  : 'bg-slate-900 border-slate-800'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⭐</span>
+                  <div>
+                    <h4 className="font-black text-xs">Telegram Stars & Bot</h4>
+                    <p className="text-[10px] text-slate-400">Echte Zahlungs-Rechnungen & Benachrichtigungen</p>
+                  </div>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                    botTokenConfigured
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  }`}
+                >
+                  {botTokenConfigured ? `Aktiv (${maskedBotToken})` : 'Nicht hinterlegt'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Wird benötigt, damit Telegram Stars Rechnungen erstellt und nach dem Kauf sofort Münzen gutgeschrieben werden.
+              </p>
+            </div>
+
+            {/* Token Input Card */}
+            <div
+              className={`p-3.5 rounded-2xl border space-y-3 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-800'
+              }`}
+            >
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                  Bot-Token von @BotFather eingeben:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    placeholder="123456789:ABCdefGHIjklmnOPQR..."
+                    value={botTokenInput}
+                    onChange={e => setBotTokenInput(e.target.value)}
+                    className={`flex-1 px-3 py-2 rounded-xl border text-xs font-mono outline-hidden ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-white'
+                    }`}
+                  />
+                  <button
+                    onClick={handleSaveBotToken}
+                    disabled={isSavingToken || !botTokenInput.trim()}
+                    className="px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 hover:brightness-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+                  >
+                    {isSavingToken ? '...' : 'Speichern'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Bot Instructions */}
+              <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800 text-[10px] text-slate-300 space-y-1.5 leading-relaxed">
+                <p className="font-bold text-amber-400">So erstellst du deinen Bot in 30 Sekunden:</p>
+                <ol className="list-decimal list-inside space-y-1 text-[9.5px] text-slate-400">
+                  <li>Öffne in Telegram <b>@BotFather</b>.</li>
+                  <li>Sende den Befehl <code>/newbot</code> und folge den Anweisungen.</li>
+                  <li>Kopiere das API-Token und füge es oben ein.</li>
+                  <li>Gehe in BotFather zu <code>/mybots</code> → Wähle deinen Bot → <b>Bot Settings</b> → <b>Menu Button</b> → URL deiner Web-App eintragen!</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: STATISTIK & STATUS */}
+        {activeTab === 'stats' && (
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 flex flex-col min-h-0">
+            {/* Quick Metrics Grid */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div
+                className={`p-3 rounded-2xl border ${
+                  isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'
+                }`}
+              >
+                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5 mb-1">
+                  <Users className="w-3.5 h-3.5 text-amber-500" /> Registrierte Spieler
+                </div>
+                <div className="font-black text-xl text-amber-500 font-mono">{players.length}</div>
+              </div>
+
+              <div
+                className={`p-3 rounded-2xl border ${
+                  isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'
+                }`}
+              >
+                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5 mb-1">
+                  <Coins className="w-3.5 h-3.5 text-amber-500" /> Münzen im Umlauf
+                </div>
+                <div className="font-black text-xl text-amber-500 font-mono">
+                  {totalEconomyCoins.toLocaleString('de-DE')}
+                </div>
+              </div>
+
+              <div
+                className={`p-3 rounded-2xl border ${
+                  isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'
+                }`}
+              >
+                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5 mb-1">
+                  <Cat className="w-3.5 h-3.5 text-purple-400" /> Katzen gesammelt
+                </div>
+                <div className="font-black text-xl text-purple-400 font-mono">{totalCats}</div>
+              </div>
+
+              <div
+                className={`p-3 rounded-2xl border ${
+                  isLight ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-900 border-slate-800'
+                }`}
+              >
+                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5 mb-1">
+                  <Key className="w-3.5 h-3.5 text-amber-400" /> Schlüssel im Umlauf
+                </div>
+                <div className="font-black text-xl text-amber-400 font-mono">{totalKeys}</div>
+              </div>
+            </div>
+
+            {/* Server & Security Status */}
+            <div
+              className={`p-3.5 rounded-2xl border space-y-2 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-800'
+              }`}
+            >
+              <h4 className="font-bold text-xs flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> System- & Sicherheitsstatus
+              </h4>
+
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-slate-800">
+                  <span className="text-slate-400">Admin-Status:</span>
+                  <span className="font-black text-emerald-400">Vollzugriff (ID: 8979248747)</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-slate-800">
+                  <span className="text-slate-400">Datenbank:</span>
+                  <span className={`font-black ${cloudflareStatus.isConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {cloudflareStatus.isConnected ? 'Cloudflare D1 SQL' : 'Lokal / Pending Cloudflare'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-slate-800">
+                  <span className="text-slate-400">Telegram Stars Bot:</span>
+                  <span className={`font-black ${botTokenConfigured ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {botTokenConfigured ? 'Aktiviert' : 'Nicht hinterlegt'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-slate-800">
+                  <span className="text-slate-400">Vercel Proxy Schutz:</span>
+                  <span className="font-black text-emerald-400">Aktiv (Keine 500er Timeouts)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+

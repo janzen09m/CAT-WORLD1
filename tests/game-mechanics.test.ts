@@ -114,4 +114,32 @@ describe('CAT WORLD - Game Mechanics & Economics Tests', () => {
     assert.strictEqual(isUserAdmin(null, { headers: { 'x-telegram-user-id': '8979248747' } } as any), true);
     assert.strictEqual(isUserAdmin(null, { headers: { 'x-player-id': 'CW-TG-8979248747' } } as any), true);
   });
+
+  it('should correctly handle Cloudflare D1 authentication configuration', async () => {
+    const { getCloudflareAuthHeaders, getDatabaseStatus } = await import('../src/server/db');
+    
+    // Bearer token mode
+    const bearerHeaders = getCloudflareAuthHeaders({
+      accountId: 'test-acc',
+      databaseId: 'test-db',
+      apiToken: 'test-token-12345',
+    });
+    assert.strictEqual(bearerHeaders['Authorization'], 'Bearer test-token-12345');
+    assert.strictEqual(bearerHeaders['X-Auth-Key'], undefined);
+
+    // Global API key mode with email
+    const globalKeyHeaders = getCloudflareAuthHeaders({
+      accountId: 'test-acc',
+      databaseId: 'test-db',
+      apiToken: 'global-key-abcde',
+      authEmail: 'user@example.com',
+    });
+    assert.strictEqual(globalKeyHeaders['X-Auth-Key'], 'global-key-abcde');
+    assert.strictEqual(globalKeyHeaders['X-Auth-Email'], 'user@example.com');
+    assert.strictEqual(globalKeyHeaders['Authorization'], undefined);
+
+    // Database status reports correctly without crashing
+    const status = getDatabaseStatus();
+    assert.ok(status.provider === 'cloudflare_d1' || status.provider === 'local');
+  });
 });

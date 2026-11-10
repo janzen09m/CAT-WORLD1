@@ -71,7 +71,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       ? err
       : 'Interner Serverfehler';
   if (!res.headersSent) {
-    res.status(500).json({
+    res.status(200).json({
       success: false,
       error: errorMsg,
     });

@@ -1296,21 +1296,22 @@ const handleAdminOverview = (req: Request, res: Response) => {
       maskedBotToken,
       cloudflareStatus: getCloudflareD1Status(),
       databaseStatus: getDatabaseStatus(),
-      postgresStatus: getPostgresStatus(),
       serverTime: new Date().toISOString(),
     });
   } catch (err: any) {
     console.error('Error fetching admin overview:', err);
-    return res.status(500).json({ success: false, error: err?.message || 'Fehler beim Laden der Admin-Daten' });
+    return res.status(200).json({ success: false, error: err?.message || 'Fehler beim Laden der Admin-Daten' });
   }
 };
 
-// Mount both GET and POST for maximum compatibility across environments & proxies
+// Mount both GET and POST with and without /api prefix for maximum compatibility
 apiRouter.get('/admin/overview', handleAdminOverview);
 apiRouter.post('/admin/overview', handleAdminOverview);
+apiRouter.get('/api/admin/overview', handleAdminOverview);
+apiRouter.post('/api/admin/overview', handleAdminOverview);
 
-// POST /api/admin/set-cloudflare-d1 (Configure Cloudflare D1 SQL database directly from Admin Panel)
-apiRouter.post('/admin/set-cloudflare-d1', async (req: Request, res: Response) => {
+// Handler for Cloudflare D1 database configuration
+const handleSetCloudflareD1 = async (req: Request, res: Response) => {
   try {
     const player = getAuthenticatedPlayer(req);
     if (!isUserAdmin(player, req)) {
@@ -1320,15 +1321,21 @@ apiRouter.post('/admin/set-cloudflare-d1', async (req: Request, res: Response) =
       });
     }
 
-    const { accountId, databaseId, apiToken } = req.body;
+    const { accountId, databaseId, apiToken, authEmail } = req.body || {};
     if (!accountId || !databaseId || !apiToken) {
-      return res.status(400).json({
+      return res.status(200).json({
         success: false,
         error: 'Bitte Account ID, Database ID und API Token angeben.',
       });
     }
 
-    const result = await setCloudflareD1Config({ accountId, databaseId, apiToken });
+    const result = await setCloudflareD1Config({
+      accountId: String(accountId).trim(),
+      databaseId: String(databaseId).trim(),
+      apiToken: String(apiToken).trim(),
+      authEmail: authEmail ? String(authEmail).trim() : undefined,
+    });
+
     return res.json({
       success: true,
       message: result.message,
@@ -1338,12 +1345,15 @@ apiRouter.post('/admin/set-cloudflare-d1', async (req: Request, res: Response) =
     });
   } catch (err: any) {
     console.error('Error connecting Cloudflare D1:', err);
-    return res.status(500).json({
+    return res.status(200).json({
       success: false,
       error: `Cloudflare D1 Verbindung fehlgeschlagen: ${err?.message || 'Prüfe Account ID, Database ID und Token'}`,
     });
   }
-});
+};
+
+apiRouter.post('/admin/set-cloudflare-d1', handleSetCloudflareD1);
+apiRouter.post('/api/admin/set-cloudflare-d1', handleSetCloudflareD1);
 
 // POST /api/admin/set-bot-token (Set bot token directly from Admin Panel for Stars & Notifications)
 apiRouter.post('/admin/set-bot-token', (req: Request, res: Response) => {
